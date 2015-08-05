@@ -1,0 +1,21 @@
+{
+  "name": "bunyan-kinesis",
+  "description": "A bunyan stream for kinesis.",
+  "version": "1.0.1",
+  "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
+  "repository": {
+    "url": "git://github.com/auth0/bunyan-kinesis.git"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --timeout 90000"
+  },
+  "dependencies": {
+    "aws-sdk": "~2.1.43",
+    "lodash": "~3.10.1"
+  },
+  "devDependencies": {
+    "chai": "~2.3.0",
+    "mocha": "~2.2.5"
+  }
+}
