@@ -22,7 +22,16 @@ var kinesis = new AWS.Kinesis({
  */
 function KinesisStream (params) {
   stream.Writable.call(this);
-  this._params = params;
+
+  this._params = _.extend({
+    buffer: true
+  }, params);
+
+  if (this._params.buffer) {
+    this._queue = [];
+    this._queueWait = setTimeout(this._sendEntries.bind(this), 5 * 1000);
+  }
+
   this._kinesis = new AWS.Kinesis(_.pick(params, ['accessKeyId', 'secretAccessKey', 'region']));
 }
 
@@ -44,19 +53,48 @@ KinesisStream.prototype._mapEntry = function (entry) {
   };
 };
 
-KinesisStream.prototype._write = function (chunk, encoding, done) {
-  var self = this;
-  var entry = JSON.parse(chunk.toString());
+KinesisStream.prototype._sendEntries = function () {
+  const pending_records = _.clone(this._queue);
+  const self = this;
+  this._queue = [];
 
-  kinesis.putRecord(_.extend({
-    StreamName: self._params.streamName
-  }, self._mapEntry(entry)), function (err, data) {
+  kinesis.putRecords({
+    StreamName: this._params.streamName,
+    Records: pending_records
+  }, function (err) {
     if (err) {
       throw err;
     }
-    done();
+    self._queueWait = setTimeout(self._sendEntries.bind(self), 5000);
   });
+};
 
+KinesisStream.prototype._write = function (chunk, encoding, done) {
+  var self = this;
+  var entry = JSON.parse(chunk.toString());
+  var record = self._mapEntry(entry);
+
+  if (this._params.buffer) {
+    this._queue.push(record);
+    if (this._queue.length >= 10 || entry.level >= 40) {
+      clearTimeout(this._queueWait);
+      this._sendEntries();
+    }
+  } else {
+    kinesis.putRecord(_.extend({
+      StreamName: self._params.streamName
+    }, record), function (err) {
+      if (err) {
+        throw err;
+      }
+      done();
+    });
+  }
+};
+
+KinesisStream.prototype.stop = function () {
+  clearTimeout(this._queueWait);
+  this._queue = [];
 };
 
 module.exports = KinesisStream;
