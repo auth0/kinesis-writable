@@ -24,7 +24,7 @@ function decode_record (record) {
   return JSON.parse(new Buffer(record.Data, 'base64').toString());
 }
 
-describe('simple case', function () {
+describe('without buffer', function () {
   var iterator;
 
   beforeEach(function (done) {
@@ -35,7 +35,7 @@ describe('simple case', function () {
     });
   });
 
-  it('should work', function (done) {
+  it('should work without buffering', function (done) {
     var bk = new KinesisStream({
       streamName: STREAM_NAME,
       partitionKey: 'test-123',
@@ -45,16 +45,16 @@ describe('simple case', function () {
     var log_entry = JSON.stringify({foo: 'bar'});
     bk._write(log_entry, null, function () {});
 
-    kinesis.getRecords({
-      ShardIterator: iterator,
-      Limit: 1
-    }, function (err, data) {
-      if (err) return done(err);
-      assert.equal(decode_record(data.Records[0]).foo, 'bar');
-      done();
-    });
+    setTimeout(function () {
+      kinesis.getRecords({
+        ShardIterator: iterator,
+        Limit: 1
+      }, function (err, data) {
+        if (err) return done(err);
+        assert.equal(decode_record(data.Records[0]).foo, 'bar');
+        done();
+      });
+    }, 200);
 
   });
-
-
 });
