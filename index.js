@@ -58,6 +58,11 @@ KinesisStream.prototype._sendEntries = function () {
   const self = this;
   this._queue = [];
 
+  if (pending_records.length === 0) {
+    self._queueWait = setTimeout(self._sendEntries.bind(self), 5000);
+    return;
+  }
+
   kinesis.putRecords({
     StreamName: this._params.streamName,
     Records: pending_records
