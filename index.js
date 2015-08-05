@@ -85,16 +85,17 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
       clearTimeout(this._queueWait);
       this._sendEntries();
     }
-  } else {
-    kinesis.putRecord(_.extend({
-      StreamName: self._params.streamName
-    }, record), function (err) {
-      if (err) {
-        throw err;
-      }
-      done();
-    });
+    return done();
   }
+
+  kinesis.putRecord(_.extend({
+    StreamName: self._params.streamName
+  }, record), function (err) {
+    if (err) {
+      throw err;
+    }
+    done();
+  });
 };
 
 KinesisStream.prototype.stop = function () {
