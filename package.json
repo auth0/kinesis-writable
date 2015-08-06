@@ -1,7 +1,7 @@
 {
   "name": "bunyan-kinesis",
   "description": "A bunyan stream for kinesis.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
   "repository": {
     "url": "git://github.com/auth0/bunyan-kinesis.git"
