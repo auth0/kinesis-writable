@@ -37,6 +37,7 @@ describe('with buffering', function () {
   it('should not immediately send the message when buffering is on', function (done) {
     var bk = new KinesisStream({
       streamName: STREAM_NAME,
+      region: 'us-west-1',
       partitionKey: 'test-123'
     });
 
@@ -57,6 +58,7 @@ describe('with buffering', function () {
 
   it('should send the events after 5 secs', function (done) {
     var bk = new KinesisStream({
+      region: 'us-west-1',
       streamName: STREAM_NAME,
       partitionKey: 'test-123'
     });
@@ -80,6 +82,7 @@ describe('with buffering', function () {
 
   it('should send the events after 10 messages', function (done) {
     var bk = new KinesisStream({
+      region: 'us-west-1',
       streamName: STREAM_NAME,
       partitionKey: 'test-123'
     });
@@ -106,6 +109,7 @@ describe('with buffering', function () {
 
   it('should send the events after a error level entry', function (done) {
     var bk = new KinesisStream({
+      region: 'us-west-1',
       streamName: STREAM_NAME,
       partitionKey: 'test-123'
     });
