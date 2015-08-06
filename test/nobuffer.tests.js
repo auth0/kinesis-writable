@@ -38,6 +38,7 @@ describe('without buffer', function () {
   it('should work without buffering', function (done) {
     var bk = new KinesisStream({
       streamName: STREAM_NAME,
+      region: 'us-west-1',
       partitionKey: 'test-123',
       buffer: false
     });

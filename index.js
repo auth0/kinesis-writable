@@ -57,7 +57,7 @@ KinesisStream.prototype._sendEntries = function () {
     return;
   }
 
-  kinesis.putRecords({
+  self._kinesis.putRecords({
     StreamName: this._params.streamName,
     Records: pending_records
   }, function (err) {
@@ -82,7 +82,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
     return done();
   }
 
-  kinesis.putRecord(_.extend({
+  self._kinesis.putRecord(_.extend({
     StreamName: self._params.streamName
   }, record), function (err) {
     if (err) {
