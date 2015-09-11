@@ -1,4 +1,4 @@
-const STREAM_NAME = 'jose_test';
+const STREAM_NAME = 'vagrant_testing';
 const KinesisStream = require('../');
 const AWS = require('aws-sdk');
 const assert = require('chai').assert;
