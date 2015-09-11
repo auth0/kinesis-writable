@@ -1,29 +1,65 @@
 var stream = require('stream');
 var util = require('util');
 var AWS = require('aws-sdk');
+var immediate = require('immediate-invocation');
 var _ = require('lodash');
 
 /**
  * [KinesisStream description]
  * @param {Object} params
- * @param {string} [params.accessKeyId]
- * @param {string} [params.secretAccessKey]
- * @param {string} [params.region]
- * @param {string} params.streamName
- * @param {string|function} params.partitionKey
- * @param {boolean} [params.buffer=true]
- *
+ * @param {string} [params.accessKeyId] AWS credentials
+ * @param {string} [params.secretAccessKey] AWS credential
+ * @param {string} [params.region] AWS region
+ * @param {string} params.streamName AWS Knesis stream name
+ * @param {string|function} params.partitionKey Constant string to use as partitionKey
+ *                                              or a function that return the partitionKey
+ *                                              based on a msg passed by argument
+ * @param {boolean|object} [params.buffer=true]
+ * @param {number} [params.buffer.timeout] Max. number of seconds
+ *                                         to wait before send msgs to stream
+ * @param {number} [params.buffer.length] Max. number of msgs to queue
+ *                                        before send them to stream.
+ * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true
+ *                                                  when msg is prioritary
  */
 function KinesisStream (params) {
   stream.Writable.call(this);
 
-  this._params = _.extend({
-    buffer: true
-  }, params);
+  var defaultBuffer = {
+    timeout: 5,
+    length: 10
+  };
+
+  this._params = _.defaultsDeep(params || {}, { 
+    buffer: defaultBuffer,
+    partitionKey: Date.now  // by default the partition key will generate 
+                            // a "random" distribution between all shards
+  });
+
+  if (!this._params.streamName) {
+    throw new Error("'streamName' property is mandatory.");
+  }
+
+  // partitionKey must be a string or a function
+  if (!this._params.partitionKey ||
+      typeof this._params.partitionKey !== 'string' &&
+      typeof this._params.partitionKey !== 'function') {
+    throw new Error("'partitionKey' property should be a string or a function.");
+  }
+
+  // if partitionKey is a string, converts it to a function that allways returns the string
+  if (typeof this._params.partitionKey === 'string') {
+    this._params.partitionKey = _.constant(this._params.partitionKey);
+  }
+
+  if (this._params.buffer && typeof this._params.buffer === 'boolean') {
+    this._params.buffer = defaultBuffer;
+  }
 
   if (this._params.buffer) {
     this._queue = [];
-    this._queueWait = setTimeout(this._sendEntries.bind(this), 5 * 1000);
+    this._queueWait = setTimeout(this._sendEntries.bind(this),  this._params.buffer.timeout * 1000);
+    this._params.buffer.isPrioritaryMsg = this._params.buffer.isPrioritaryMsg || _.noop;
   }
 
   this._kinesis = new AWS.Kinesis(_.pick(params, ['accessKeyId', 'secretAccessKey', 'region']));
@@ -32,18 +68,14 @@ function KinesisStream (params) {
 util.inherits(KinesisStream, stream.Writable);
 
 /**
- * Map a bunyan log entry to a record structure
- * @param  {Object} entry - bunyan entry
+ * Map a msg to a record structure
+ * @param  {@} msg -  entry
  * @return {Object} { Data, PartitionKey }
  */
-KinesisStream.prototype._mapEntry = function (entry) {
-  var partitionKey = typeof this._params.partitionKey === 'function' ?
-                          this._params.partitionKey(entry) :
-                          this._params.partitionKey;
-
+KinesisStream.prototype._mapEntry = function (msg) {
   return {
-    Data: JSON.stringify(entry, null, 2),
-    PartitionKey: partitionKey
+    Data: msg,
+    PartitionKey: this._params.partitionKey(msg)
   };
 };
 
@@ -53,43 +85,61 @@ KinesisStream.prototype._sendEntries = function () {
   this._queue = [];
 
   if (pending_records.length === 0) {
-    self._queueWait = setTimeout(self._sendEntries.bind(self), 5000);
+    self._queueWait = setTimeout(self._sendEntries.bind(self), self._params.buffer.timeout * 1000);
     return;
   }
 
-  self._kinesis.putRecords({
+  var requestContent = {
     StreamName: this._params.streamName,
     Records: pending_records
-  }, function (err) {
+  };
+
+  self._kinesis.putRecords(requestContent, function (err, result) {
+    self._queueWait = setTimeout(self._sendEntries.bind(self), self._params.buffer.timeout * 1000);
     if (err) {
-      throw err;
+      return self.emit('error', err);
     }
-    self._queueWait = setTimeout(self._sendEntries.bind(self), 5000);
+    if (result && result.FailedRecordCount) {
+      result.Records
+      .forEach(function (recordResult, index) {
+        if (recordResult.ErrorCode) {
+          recordResult.Record = requestContent.Records[index];
+          self.emit('errorRecord', recordResult);
+        }
+      });
+    }
   });
 };
 
 KinesisStream.prototype._write = function (chunk, encoding, done) {
   var self = this;
-  var entry = JSON.parse(chunk.toString());
-  var record = self._mapEntry(entry);
 
-  if (this._params.buffer) {
-    this._queue.push(record);
-    if (this._queue.length >= 10 || entry.level >= 40) {
-      clearTimeout(this._queueWait);
-      this._sendEntries();
+  try {
+    var msg = chunk.toString();
+    var record = self._mapEntry(msg);
+
+    if (this._params.buffer) {
+      this._queue.push(record);
+
+      // sends buffer when msg is prioritary
+      var shouldSendEntries = this._queue.length >= this._params.buffer.length ||  // queue reached max size
+                              this._params.buffer.isPrioritaryMsg(msg);            // msg is prioritary
+      
+      if (shouldSendEntries) {
+        clearTimeout(this._queueWait);
+        this._sendEntries();
+      }
+      return immediate(done);
     }
-    return done();
+
+    self._kinesis.putRecord(_.extend({
+      StreamName: self._params.streamName
+    }, record), function (err) {
+      done(err);
+    });
+  } catch (e) {
+    immediate(done, e);
   }
-
-  self._kinesis.putRecord(_.extend({
-    StreamName: self._params.streamName
-  }, record), function (err) {
-    if (err) {
-      throw err;
-    }
-    done();
-  });
 };
 
 KinesisStream.prototype.stop = function () {

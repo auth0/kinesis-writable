@@ -8,14 +8,17 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "mocha --timeout 90000"
+    "test": "NODE_ENV=test istanbul cover _mocha -- -R spec --timeout 5000"
   },
   "dependencies": {
     "aws-sdk": "~2.1.43",
+    "immediate-invocation": "^1.0.0",
     "lodash": "~3.10.1"
   },
   "devDependencies": {
     "chai": "~2.3.0",
-    "mocha": "~2.2.5"
+    "istanbul": "^0.3.19",
+    "mocha": "~2.2.5",
+    "sinon": "^1.16.1"
   }
 }
