@@ -9,21 +9,18 @@ npm i bunyan-kinesis --save
 ## Usage
 
 ```javascript
-var BunyanKinesis = require('bunyan-kinesis');
+var KinesisWritable = require('kinesis-writable');
 
-var log = bunyan.createLogger({
-  streams: [
-    {
-      stream: new BunyanKinesis({
-        accessKeyId:     'KEY_ID',
-        secretAccessKey: 'SECRET_KEY',
-        region:          'AWS_REGION',
-        streamName:      'MyKinesisStream',
-        partitionKey:    'MyApp'
-      })
-    }
-  ]
+var kinesis = new KinesisWritable({
+  accessKeyId:     'KEY_ID',
+  secretAccessKey: 'SECRET_KEY',
+  region:          'AWS_REGION',
+  streamName:      'MyKinesisStream',
+  partitionKey:    'MyApp'
 });
+
+process.stdin.resume();
+process.stdin.pipe(kinesis);
 ```
 
 ### Configuration Parameters
@@ -38,7 +35,7 @@ This library uses by default an smart buffering approach. Messages are sent when
 
 Example:
 ```javascript
-new BunyanKinesis({
+new KinesisWritable({
   region:          'AWS_REGION',
   streamName:      'MyKinesisStream',
   partitionKey:     "foo",
@@ -47,7 +44,7 @@ new BunyanKinesis({
     lenght: 100,                        // or when 100 messages are in the queue
     isPrioritaryMsg: function (msg) {   // or the message has a type > 40
       var entry = JSON.parse(msg);
-      return entry.type > 40;      
+      return entry.type > 40;
     }
   }
 });
