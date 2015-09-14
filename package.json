@@ -1,5 +1,5 @@
 {
-  "name": "kinesis-writable",
+  "name": "aws-kinesis-writeable",
   "description": "A bunyan stream for kinesis.",
   "version": "1.2.0",
   "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
