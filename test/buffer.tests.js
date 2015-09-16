@@ -39,16 +39,6 @@ describe('with buffering', function () {
       isPrioritaryMsg: _.noop
     };
 
-    it('should fail if streamName arg is missing', function() {
-      try {
-        new KinesisStream();
-        assert.fail("should not reach here!");
-      } catch (e) {
-        assert.ok(e instanceof Error);
-        assert.equal(e.message, "'streamName' property is mandatory.");
-      }
-    });
-
     it('should be able to create an instance', function() {
       var instance = new KinesisStream({ streamName: STREAM_NAME });
       assert.ok(instance instanceof KinesisStream);
@@ -93,12 +83,82 @@ describe('with buffering', function () {
     });
   });
 
+  describe ('method setStreamName', function () {
+    
+    [
+      null,
+      undefined,
+      {},
+      true,
+      10
+    ].forEach(function (value) {
+
+      it ('should throw an exception if the value is not a valid string (' + value +')', function () {
+        var bk = new KinesisStream({
+          region: 'us-west-1',
+          partitionKey: 'test-123'
+        });
+
+        try {
+          bk.setStreamName(value);
+          assert.fail('should not reach here!');
+        } catch (e) {
+          assert.ok(e instanceof Error);
+          assert.equal(e.message, '\'streamName\' must be a valid string.');
+        }
+      });
+    });
+
+    it ('should override previous value of stream-name', function () {
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        partitionKey: 'test-123'
+      });
+
+      assert.ok(!bk.getStreamName());
+
+      bk.setStreamName('foo');
+
+      assert.ok(bk.getStreamName(), 'foo');
+    });
+  });
+
+  describe('method getStreamName', function () {
+    it ('should return null if not stream\'s name was configured.', function () {
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        partitionKey: 'test-123'
+      });
+
+      assert.equal(bk.getStreamName(), null);
+    });
+
+    it ('should return the configured stream\'s name.', function () {
+      var bk = new KinesisStream({
+        streamName: 'foo',
+        region: 'us-west-1',
+        partitionKey: 'test-123'
+      });
+
+      assert.equal(bk.getStreamName(), 'foo');
+    });
+
+    it ('should return stream\'s name that was set.', function () {
+      var bk = new KinesisStream({
+        streamName: 'foo',
+        region: 'us-west-1',
+        partitionKey: 'test-123'
+      });
+
+      bk.setStreamName('bar');
+      assert.equal(bk.getStreamName(), 'bar');
+    });
+  });
+
   describe ('method _write', function () {
     var iterator;
 
     this.timeout(10000);
-
-    
 
     beforeEach(function (done) {
       get_iterator(function (err, data) {
@@ -126,7 +186,6 @@ describe('with buffering', function () {
         assert.equal(data.Records.length, 0);
         done();
       });
-
     });
 
     it('should send the events after X secs', function (done) {
@@ -253,6 +312,24 @@ describe('with buffering', function () {
       bk._write("foo", null, function (err) {
         assert.ok(err instanceof Error);
         assert.equal(err.message, "some error");
+        done();
+      });
+    });
+
+    it ('should return an error if no stream\'s name was configured', function (done) {
+
+      var data = JSON.stringify({foo: 'bar'});
+
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        buffer: {
+          length: 1
+        }
+      });
+
+      bk._write(data, null, function (err) {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message, 'Stream\'s name was not set.');
         done();
       });
     });

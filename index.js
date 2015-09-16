@@ -30,15 +30,12 @@ function KinesisStream (params) {
     length: 10
   };
 
-  this._params = _.defaultsDeep(params || {}, { 
+  this._params = _.defaultsDeep(params || {}, {
+    streamName: null, 
     buffer: defaultBuffer,
     partitionKey: Date.now  // by default the partition key will generate 
                             // a "random" distribution between all shards
   });
-
-  if (!this._params.streamName) {
-    throw new Error("'streamName' property is mandatory.");
-  }
 
   // partitionKey must be a string or a function
   if (!this._params.partitionKey ||
@@ -67,6 +64,19 @@ function KinesisStream (params) {
 
 util.inherits(KinesisStream, stream.Writable);
 
+KinesisStream.prototype.setStreamName = function (streamName) {
+
+  if (!streamName || typeof streamName !== 'string') {
+    throw new Error('\'streamName\' must be a valid string.');
+  }
+
+  this._params.streamName = streamName;
+};
+
+KinesisStream.prototype.getStreamName = function () {
+
+  return this._params.streamName;
+};
 /**
  * Map a msg to a record structure
  * @param  {@} msg -  entry
@@ -87,6 +97,10 @@ KinesisStream.prototype._sendEntries = function () {
   if (pending_records.length === 0) {
     self._queueWait = setTimeout(self._sendEntries.bind(self), self._params.buffer.timeout * 1000);
     return;
+  }
+
+  if (!self._params.streamName) {
+    self.emit('error', new Error('Stream\'s name was not set.'));
   }
 
   var requestContent = {
@@ -113,6 +127,10 @@ KinesisStream.prototype._sendEntries = function () {
 
 KinesisStream.prototype._write = function (chunk, encoding, done) {
   var self = this;
+
+  if (!this._params.streamName) {
+    return immediate (done, new Error('Stream\'s name was not set.'));
+  }
 
   try {
     var msg = chunk.toString();
