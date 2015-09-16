@@ -66,6 +66,11 @@ new BunyanKinesis({
 
 `streamName` is the name of the Kinesis Stream.
 
+### Methods
+`getStreamName()`: returns Stream's name.
+
+`setStreamName(name)`: set the name of the stream where messages will be send.
+
 ### Events
 `errorRecord`: Emitted once for each failed record at the `aws.kinesis.putRecords`'s response.
 
