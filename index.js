@@ -33,8 +33,9 @@ function KinesisStream (params) {
   this._params = _.defaultsDeep(params || {}, {
     streamName: null, 
     buffer: defaultBuffer,
-    partitionKey: Date.now  // by default the partition key will generate 
-                            // a "random" distribution between all shards
+    partitionKey: function() {        // by default the partition key will generate 
+      return Date.now().toString();   // a "random" distribution between all shards
+    }
   });
 
   // partitionKey must be a string or a function
