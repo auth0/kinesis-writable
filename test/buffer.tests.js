@@ -300,6 +300,36 @@ describe('with buffering', function () {
       }, 500);
     });
 
+    it('should be able to use the default partitionKey function', function (done) {
+
+      var data = JSON.stringify({foo: 'bar'});
+
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        streamName: STREAM_NAME,
+        buffer: {
+          length: 1
+        }
+      });
+
+      bk._write(data, null, _.noop);
+
+      setTimeout(function () {
+        kinesis.getRecords({
+          ShardIterator: iterator,
+          Limit: 1
+        }, function (err, result) {
+          bk.stop();
+          if (err) return done(err);
+          assert.equal(result.Records.length, 1);
+          assert.equal(result.Records[0].Data, data);
+          assert.ok(result.Records[0].PartitionKey);
+          assert.equal(typeof result.Records[0].PartitionKey, 'string');
+          done();
+        });
+      }, 500);
+    });
+
     it ('should return an error if partitionKey function throws an exception', function (done) {
       var bk = new KinesisStream({
         region: 'us-west-1',
