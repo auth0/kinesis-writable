@@ -3,13 +3,13 @@ Kinesis writteable stream for bunyan.
 ## Installation
 
 ```
-npm i bunyan-kinesis --save
+npm install aws-kinesis-writable --save
 ```
 
 ## Usage
 
 ```javascript
-var KinesisWritable = require('kinesis-writable');
+var KinesisWritable = require('aws-kinesis-writable');
 
 var kinesis = new KinesisWritable({
   accessKeyId:     'KEY_ID',
@@ -54,7 +54,7 @@ new KinesisWritable({
 `partitionKey` can be either an string or a function that accepts a mesage and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
 
 ```javascript
-new BunyanKinesis({
+new KinesisWritable({
   region:          'AWS_REGION',
   streamName:      'MyKinesisStream',
   partitionKey:     function (msg) {
