@@ -23,7 +23,7 @@ var _ = require('lodash');
  *                                                  when msg is prioritary
  */
 function KinesisStream (params) {
-  stream.Writable.call(this);
+  stream.Writable.call(this, { objectMode: params.objectMode });
 
   var defaultBuffer = {
     timeout: 5,
@@ -134,7 +134,12 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
   }
 
   try {
-    var msg = chunk.toString();
+    var msg = chunk;
+
+    if (Buffer.isBuffer(msg) || typeof msg === 'string') {
+      msg = JSON.parse(msg.toString());
+    }
+
     var record = self._mapEntry(msg);
 
     if (this._params.buffer) {
@@ -143,7 +148,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
       // sends buffer when msg is prioritary
       var shouldSendEntries = this._queue.length >= this._params.buffer.length ||  // queue reached max size
                               this._params.buffer.isPrioritaryMsg(msg);            // msg is prioritary
-      
+
       if (shouldSendEntries) {
         clearTimeout(this._queueWait);
         this._sendEntries();
