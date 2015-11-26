@@ -1,7 +1,6 @@
 var stream = require('stream');
 var util = require('util');
 var AWS = require('aws-sdk');
-var immediate = require('immediate-invocation');
 var _ = require('lodash');
 
 /**
@@ -23,7 +22,7 @@ var _ = require('lodash');
  *                                                  when msg is prioritary
  */
 function KinesisStream (params) {
-  stream.Writable.call(this);
+  stream.Writable.call(this, { objectMode: params.objectMode });
 
   var defaultBuffer = {
     timeout: 5,
@@ -31,7 +30,7 @@ function KinesisStream (params) {
   };
 
   this._params = _.defaultsDeep(params || {}, {
-    streamName: null, 
+    streamName: null,
     buffer: defaultBuffer,
     partitionKey: function() {        // by default the partition key will generate 
       return Date.now().toString();   // a "random" distribution between all shards
@@ -56,14 +55,25 @@ function KinesisStream (params) {
 
   if (this._params.buffer) {
     this._queue = [];
-    this._queueWait = setTimeout(this._sendEntries.bind(this),  this._params.buffer.timeout * 1000);
-    this._params.buffer.isPrioritaryMsg = this._params.buffer.isPrioritaryMsg || _.noop;
+    this._queueWait = this._queueSendEntries();
+    this._params.buffer.isPrioritaryMsg = this._params.buffer.isPrioritaryMsg;
   }
 
-  this._kinesis = new AWS.Kinesis(_.pick(params, ['accessKeyId', 'secretAccessKey', 'region']));
+  this._kinesis = new AWS.Kinesis(_.pick(params, [
+    'accessKeyId',
+    'secretAccessKey',
+    'region',
+    'httpOptions']));
 }
 
 util.inherits(KinesisStream, stream.Writable);
+
+KinesisStream.prototype._queueSendEntries = function () {
+  var self = this;
+  return setTimeout(function(){
+    self._sendEntries();
+  }, this._params.buffer.timeout * 1000);
+};
 
 KinesisStream.prototype.setStreamName = function (streamName) {
 
@@ -81,27 +91,39 @@ KinesisStream.prototype.getStreamName = function () {
 /**
  * Map a msg to a record structure
  * @param  {@} msg -  entry
- * @return {Object} { Data, PartitionKey }
+ * @return {Record} { Data, PartitionKey, StreamName }
  */
-KinesisStream.prototype._mapEntry = function (msg) {
-  return {
-    Data: msg,
-    PartitionKey: this._params.partitionKey(msg)
-  };
+KinesisStream.prototype._mapEntry = function (msg, buffer) {
+  if (buffer){
+    return new BufferedRecord(msg, this._params.partitionKey(msg));
+  } else {
+    return new NonBufferedRecord(msg, this._params.partitionKey(msg), this._params.streamName);
+  }
+};
+
+var BufferedRecord = function(data, pk){
+  this.Data = data;
+  this.PartitionKey = pk;
+};
+
+var NonBufferedRecord = function(data, pk, streamName){
+  this.Data = data;
+  this.PartitionKey = pk;
+  this.StreamName = streamName;
 };
 
 KinesisStream.prototype._sendEntries = function () {
-  const pending_records = _.clone(this._queue);
+  const pending_records = this._queue;
   const self = this;
   this._queue = [];
 
   if (pending_records.length === 0) {
-    self._queueWait = setTimeout(self._sendEntries.bind(self), self._params.buffer.timeout * 1000);
+    this._queueWait = this._queueSendEntries();
     return;
   }
 
   if (!self._params.streamName) {
-    self.emit('error', new Error('Stream\'s name was not set.'));
+    this.emit('error', new Error('Stream\'s name was not set.'));
   }
 
   var requestContent = {
@@ -109,8 +131,8 @@ KinesisStream.prototype._sendEntries = function () {
     Records: pending_records
   };
 
-  self._kinesis.putRecords(requestContent, function (err, result) {
-    self._queueWait = setTimeout(self._sendEntries.bind(self), self._params.buffer.timeout * 1000);
+  this._kinesis.putRecords(requestContent, function (err, result) {
+    self._queueWait = self._queueSendEntries();
     if (err) {
       return self.emit('error', err);
     }
@@ -127,37 +149,50 @@ KinesisStream.prototype._sendEntries = function () {
 };
 
 KinesisStream.prototype._write = function (chunk, encoding, done) {
-  var self = this;
-
   if (!this._params.streamName) {
-    return immediate (done, new Error('Stream\'s name was not set.'));
+    return setImmediate (done, new Error('Stream\'s name was not set.'));
   }
 
+  var isPrioMessage = this._params.buffer.isPrioritaryMsg;
+
   try {
-    var msg = chunk.toString();
-    var record = self._mapEntry(msg);
+    var obj, msg;
+    if (Buffer.isBuffer(chunk)) {
+      msg = chunk;
+      if (isPrioMessage){
+        obj = JSON.parse(chunk.toString(encoding));
+      }
+    } else if (typeof chunk === 'string') {
+      msg = chunk;
+      if (isPrioMessage){
+        obj = JSON.parse(chunk);
+      }
+    } else {
+      obj = chunk;
+      msg = JSON.stringify(obj);
+    }
+
+    var record = this._mapEntry(msg, !!this._params.buffer);
 
     if (this._params.buffer) {
       this._queue.push(record);
 
-      // sends buffer when msg is prioritary
+      // sends buffer when current chunk is for prioritary entry
       var shouldSendEntries = this._queue.length >= this._params.buffer.length ||  // queue reached max size
-                              this._params.buffer.isPrioritaryMsg(msg);            // msg is prioritary
-      
+                              (isPrioMessage && isPrioMessage(obj));            // msg is prioritary
+
       if (shouldSendEntries) {
         clearTimeout(this._queueWait);
         this._sendEntries();
       }
-      return immediate(done);
+      return setImmediate(done);
     }
 
-    self._kinesis.putRecord(_.extend({
-      StreamName: self._params.streamName
-    }, record), function (err) {
+    this._kinesis.putRecord(record, function (err) {
       done(err);
     });
   } catch (e) {
-    immediate(done, e);
+    setImmediate(done, e);
   }
 };
 
