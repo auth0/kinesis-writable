@@ -11,8 +11,7 @@ const kinesis = new AWS.Kinesis({
 
 const STREAM_NAME   = 'vagrant_testing';
 
-function isPrioritaryMsg(msg) {
-  var entry = JSON.parse(msg);
+function isPrioritaryMsg(entry) {
   return entry.level >= 40;
 }
 
@@ -36,7 +35,7 @@ describe('with buffering', function () {
     var defaultBuffer = {
       timeout: 5,
       length: 10,
-      isPrioritaryMsg: _.noop
+      isPrioritaryMsg: undefined
     };
 
     it('should be able to create an instance', function() {
@@ -46,20 +45,20 @@ describe('with buffering', function () {
 
     it ('should set default buffer by default', function () {
       var instance = new KinesisStream({ streamName: STREAM_NAME });
-      assert.ok(instance._params.buffer);    
-      assert.deepEqual(instance._params.buffer, defaultBuffer);     
+      assert.ok(instance._params.buffer);
+      assert.deepEqual(instance._params.buffer, defaultBuffer);
       assert.equal(typeof instance._params.partitionKey, 'function');
     });
 
     it ('should set default buffer when it was set to true.', function () {
       var instance = new KinesisStream({ streamName: STREAM_NAME, buffer: true });
-      assert.ok(instance._params.buffer);    
-      assert.deepEqual(instance._params.buffer, defaultBuffer);      
+      assert.ok(instance._params.buffer);
+      assert.deepEqual(instance._params.buffer, defaultBuffer);
     });
 
     it ('should be able to disable buffer', function () {
       var instance = new KinesisStream({ streamName: STREAM_NAME, buffer: false });
-      assert.ok(!instance._params.buffer);    
+      assert.ok(!instance._params.buffer);
     });
 
     it ('should fail if partitionKey is invalid', function () {
@@ -84,7 +83,6 @@ describe('with buffering', function () {
   });
 
   describe ('method setStreamName', function () {
-    
     [
       null,
       undefined,
@@ -213,6 +211,31 @@ describe('with buffering', function () {
       }, x * 1000 + 100);
     });
 
+    it('should support object events', function (done) {
+      var x = 1;
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        streamName: STREAM_NAME,
+        partitionKey: 'test-123',
+        buffer: { timeout: x }
+      });
+
+      var log_entry = {foo: 'bar'};
+      bk._write(log_entry, null, _.noop);
+
+      setTimeout(function () {
+        kinesis.getRecords({
+          ShardIterator: iterator,
+          Limit: 1
+        }, function (err, data) {
+          bk.stop();
+          if (err) return done(err);
+          assert.equal(data.Records.length, 1);
+          done();
+        });
+      }, x * 1000 + 100);
+    });
+
     it('should send the events after X messages', function (done) {
       var x = 3;
       var bk = new KinesisStream({
@@ -240,8 +263,7 @@ describe('with buffering', function () {
       }, 500);
     });
 
-    it('should send the events after a error level entry', function (done) {
-      
+    it('should send the events after an error level entry', function (done) {
       var bk = new KinesisStream({
         region: 'us-west-1',
         streamName: STREAM_NAME,
