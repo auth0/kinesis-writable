@@ -160,7 +160,11 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
     if (Buffer.isBuffer(chunk)) {
       msg = chunk;
       if (isPrioMessage){
-        obj = JSON.parse(chunk.toString(encoding));
+        if (encoding === 'buffer'){
+          obj = JSON.parse(chunk.toString());
+        } else {
+          obj = JSON.parse(chunk.toString(encoding));
+        }
       }
     } else if (typeof chunk === 'string') {
       msg = chunk;
