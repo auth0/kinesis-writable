@@ -81,9 +81,10 @@ describe('without buffer', function () {
     bk._write("foo", null, function (err) {
       assert.ok(err instanceof Error);
       assert.equal(err.message, "some error from AWS");
+      assert.equal(err.streamName, STREAM_NAME);
       assert.ok(err.records);
       assert.equal(err.records.length, 1);
-      assert.deepEqual(err.records[0], { Data: 'foo', PartitionKey: 'foo', StreamName: STREAM_NAME });
+      assert.deepEqual(err.records[0], { Data: 'foo', PartitionKey: 'foo' });
       done();
     });
   });  
