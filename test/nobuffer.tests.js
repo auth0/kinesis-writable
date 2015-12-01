@@ -2,6 +2,8 @@ const STREAM_NAME = 'vagrant_testing';
 const KinesisStream = require('../');
 const AWS = require('aws-sdk');
 const assert = require('chai').assert;
+const sinon = require('sinon');
+
 const kinesis = new AWS.Kinesis({
   region: 'us-west-1'
 });
@@ -56,6 +58,33 @@ describe('without buffer', function () {
         done();
       });
     }, 200);
-
   });
+
+
+  it('should emit error event when aws returns an error', function (done) {
+
+    var bk = new KinesisStream({
+      streamName: STREAM_NAME,
+      region: 'us-west-1',
+      partitionKey: "foo",
+      buffer: false
+    });  
+
+    sinon.stub(bk._kinesis, 'putRecord')
+      .onFirstCall()
+      .yields(new Error("some error from AWS"));
+    
+    bk.on('error', function (err) {
+      assert.fail('should not emit error event!');
+    });
+
+    bk._write("foo", null, function (err) {
+      assert.ok(err instanceof Error);
+      assert.equal(err.message, "some error from AWS");
+      assert.ok(err.records);
+      assert.equal(err.records.length, 1);
+      assert.deepEqual(err.records[0], { Data: 'foo', PartitionKey: 'foo', StreamName: STREAM_NAME });
+      done();
+    });
+  });  
 });

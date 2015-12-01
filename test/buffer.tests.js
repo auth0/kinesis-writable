@@ -402,6 +402,9 @@ describe('with buffering', function () {
       bk.on('error', function (err) {
         assert.ok(err instanceof Error);
         assert.equal(err.message, "some error from AWS");
+        assert.ok(err.records);
+        assert.equal(err.records.length, 1);
+        assert.deepEqual(err.records[0], { Data: 'foo', PartitionKey: 'foo' });
         done();
       });
 

@@ -134,8 +134,10 @@ KinesisStream.prototype._sendEntries = function () {
   this._kinesis.putRecords(requestContent, function (err, result) {
     self._queueWait = self._queueSendEntries();
     if (err) {
+      err.records = requestContent.Records;
       return self.emit('error', err);
     }
+
     if (result && result.FailedRecordCount) {
       result.Records
       .forEach(function (recordResult, index) {
@@ -193,6 +195,9 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
     }
 
     this._kinesis.putRecord(record, function (err) {
+      if (err) {
+        err.records = [ record ];
+      }
       done(err);
     });
   } catch (e) {
