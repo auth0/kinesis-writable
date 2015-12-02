@@ -42,6 +42,7 @@ describe('with buffering', function () {
     var defaultBuffer = {
       timeout: 5,
       length: 10,
+      maxBatchSize: 5241856,
       isPrioritaryMsg: undefined
     };
 
@@ -216,6 +217,36 @@ describe('with buffering', function () {
           done();
         });
       }, x * 1000 + 100);
+    });
+
+
+    it('should send the events before buffer exceeds max batch size', function (done) {
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        streamName: STREAM_NAME,
+        partitionKey: 'test-123',
+        buffer: { length: 1000, timeout: 1, maxBatchSize: 5 * 1024 /* 5KiB */ }
+      });
+
+      // the max batch size es 5KiB
+      // so 12 logs larger than 512B (aprox 6KB) will exceed the batch size
+      for(var i=0; i<12; i++) {
+        var log_entry = JSON.stringify({i:i, foo_500K: _.repeat('*', 512)});
+        bk._write(log_entry, null, _.noop);
+      }
+
+      setTimeout(function () {
+        kinesis.getRecords({
+          ShardIterator: iterator,
+          Limit: 20
+        }, function (err, data) {
+          bk.stop();
+          if (err) return done(err);
+          // all logs entries should arrive to kinesis
+          assert.equal(data.Records.length, 12);
+          done();
+        });
+      }, 3000);
     });
 
     it('should support object events', function (done) {
