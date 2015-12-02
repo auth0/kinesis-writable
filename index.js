@@ -18,15 +18,20 @@ var _ = require('lodash');
  *                                         to wait before send msgs to stream
  * @param {number} [params.buffer.length] Max. number of msgs to queue
  *                                        before send them to stream.
+ * @param {number} [params.buffer.maxBatchSize] Max. size in bytes of the batch sent to Kinesis. Default 5242880 (5MiB)
  * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true
  *                                                  when msg is prioritary
  */
+
+var MAX_BATCH_SIZE = 5*1024*1024 - 1024; // 4.99MiB
+
 function KinesisStream (params) {
   stream.Writable.call(this, { objectMode: params.objectMode });
 
   var defaultBuffer = {
     timeout: 5,
-    length: 10
+    length: 10,
+    maxBatchSize: MAX_BATCH_SIZE
   };
 
   this._params = _.defaultsDeep(params || {}, {
@@ -117,6 +122,7 @@ KinesisStream.prototype._sendEntries = function () {
   const self = this;
 
   this._queue = [];
+  this._batch_size = 0;
 
   if (pending_records.length === 0) {
     this._queueWait = this._queueSendEntries();
@@ -213,7 +219,15 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
 
     var record = this._mapEntry(msg, !!this._params.buffer);
 
-    if (this._params.buffer) {
+      if (this._params.buffer) {
+
+      // sends buffer when current current record will exceed bmax batch size
+      this._batch_size = (this._batch_size || 0) + msg.length;
+      if (this._batch_size > this._params.buffer.maxBatchSize) {
+        clearTimeout(this._queueWait);
+        this._sendEntries();
+      }
+
       this._queue.push(record);
 
       // sends buffer when current chunk is for prioritary entry
@@ -247,7 +261,7 @@ KinesisStream.prototype.stop = function () {
 module.exports = KinesisStream;
 
 
-const RECORD_REGEXP = /records\.(\d+)\.member\.data/g
+const RECORD_REGEXP = /records\.(\d+)\.member\.data/g;
 
 function getRecordIndexesFromError (err) {
   var matches = [];
