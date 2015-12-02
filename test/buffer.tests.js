@@ -16,16 +16,23 @@ function isPrioritaryMsg(entry) {
 }
 
 function get_iterator (callback) {
-  kinesis.describeStream({
+  
+  var options = {
     StreamName: STREAM_NAME
-  }, function (err, stream) {
+  };
+
+  kinesis.describeStream(options, function (err, stream) {
     if (err) return callback(err);
+  
     var params = {
       ShardId: stream.StreamDescription.Shards[0].ShardId,
       ShardIteratorType: 'LATEST',
       StreamName: STREAM_NAME
     };
-    kinesis.getShardIterator(params, callback);
+  
+    kinesis.getShardIterator(params, function (err, data) {
+      setImmediate(callback, err, data);
+    });
   });
 }
 
@@ -233,7 +240,7 @@ describe('with buffering', function () {
           assert.equal(data.Records.length, 1);
           done();
         });
-      }, x * 1000 + 100);
+      }, x * 1000 + 300);
     });
 
     it('should send the events after X messages', function (done) {
@@ -395,10 +402,10 @@ describe('with buffering', function () {
         partitionKey: "foo"
       });  
 
-      sinon.stub(bk._kinesis, 'putRecords')
+      var stub = sinon.stub(bk._kinesis, 'putRecords')
         .onFirstCall()
         .yields(new Error("some error from AWS"));
-      
+
       bk.on('error', function (err) {
         assert.ok(err instanceof Error);
         assert.equal(err.message, "some error from AWS");
@@ -406,6 +413,7 @@ describe('with buffering', function () {
         assert.ok(err.records);
         assert.equal(err.records.length, 1);
         assert.deepEqual(err.records[0], { Data: 'foo', PartitionKey: 'foo' });
+        stub.stub.restore();
         done();
       });
 
@@ -441,7 +449,7 @@ describe('with buffering', function () {
         ]
       };
       
-      sinon.stub(bk._kinesis, 'putRecords')
+      var stub = sinon.stub(bk._kinesis, 'putRecords')
         .onFirstCall()
         .yields(null, response);
       
@@ -469,6 +477,7 @@ describe('with buffering', function () {
                 "PartitionKey": "foo"
               }
             });
+            stub.stub.restore();
             done();
             break;
           default:
@@ -480,6 +489,58 @@ describe('with buffering', function () {
       bk._write("foo_" + i, null, function (err) {
         assert.ok(!err);
       });
+    });
+
+    it ('should retries with valid records after an error ocurred. (this test takes like a minute)', function (done) {
+
+      this.timeout(120000);
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        buffer: { length: 3, timeout: 2 },
+        streamName: STREAM_NAME,
+        partitionKey: "bar"
+      }); 
+
+      var largerThan1MB = JSON.stringify({ x : _.repeat('*', 1024*1024) });
+      var shorterThan1MB = JSON.stringify({ x: 1 });
+
+      bk.on('error', function (err) {
+        // should receive only one record, the one that es larger than 1MB
+        assert.ok(err instanceof Error);
+        assert.equal(err.streamName, STREAM_NAME);
+        assert.ok(err.records);
+        assert.equal(err.records.length, 1);
+        assert.equal(err.records[0].Data, largerThan1MB);
+        setTimeout(validateRecordsAtKinesis, 1000);
+      });
+
+      // write 3 records,
+      bk._write(shorterThan1MB, null, function (err) {
+        assert.ok(!err);
+      });
+
+      bk._write(largerThan1MB, null, function (err) {
+        assert.ok(!err);
+      });
+
+      bk._write(shorterThan1MB, null, function (err) {
+        assert.ok(!err);
+      });
+
+      function validateRecordsAtKinesis() {
+        // two records shorter than 1MB must be stored at Kinesis
+        kinesis.getRecords({
+          ShardIterator: iterator,
+          Limit: 10
+        }, function (err, result) {
+          bk.stop();
+          if (err) return done(err);
+          assert.equal(result.Records.length, 2);
+          assert.equal(result.Records[0].Data, shorterThan1MB);
+          assert.equal(result.Records[1].Data, shorterThan1MB);
+          done();
+        });
+      }
     });
   });
 });
