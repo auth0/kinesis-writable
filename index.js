@@ -115,6 +115,7 @@ var NonBufferedRecord = function(data, pk, streamName){
 KinesisStream.prototype._sendEntries = function () {
   const pending_records = this._queue;
   const self = this;
+
   this._queue = [];
 
   if (pending_records.length === 0) {
@@ -131,12 +132,16 @@ KinesisStream.prototype._sendEntries = function () {
     Records: pending_records
   };
 
+  this._putRecords(requestContent);
+};
+
+KinesisStream.prototype._putRecords = function(requestContent) {
+  const self = this;
+
   this._kinesis.putRecords(requestContent, function (err, result) {
     self._queueWait = self._queueSendEntries();
     if (err) {
-      err.streamName = requestContent.StreamName;
-      err.records = requestContent.Records;
-      return self.emit('error', err);
+      return self._retryValidRecords(requestContent, err);
     }
 
     if (result && result.FailedRecordCount) {
@@ -149,6 +154,33 @@ KinesisStream.prototype._sendEntries = function () {
       });
     }
   });
+};
+
+KinesisStream.prototype._retryValidRecords = function(requestContent, err) {
+  const self = this;
+
+  // By default asumes that all records filed
+  var failedRecords = requestContent.Records;
+
+  // try to find within the error, whih records have fail.
+  var failedRecordIndexes = getRecordIndexesFromError(err);
+
+  if (failedRecordIndexes.length > 0) {
+
+    // failed records found, extract them from collection of records
+    failedRecords = _.pullAt(requestContent.Records, failedRecordIndexes);
+
+    // now, try one more time with records that didn't fail.
+    self._putRecords({ 
+      StreamName: requestContent.StreamName,
+      Records: requestContent.Records
+    });
+  }
+
+  // send error with failed records
+  err.streamName = requestContent.StreamName;
+  err.records = failedRecords;
+  self.emit('error', err);
 };
 
 KinesisStream.prototype._write = function (chunk, encoding, done) {
@@ -213,3 +245,20 @@ KinesisStream.prototype.stop = function () {
 };
 
 module.exports = KinesisStream;
+
+
+const RECORD_REGEXP = /records\.(\d+)\.member\.data/g
+
+function getRecordIndexesFromError (err) {
+  var matches = [];
+
+  if (err && _.isString(err.message)) {
+    var match = RECORD_REGEXP.exec(err.message);
+    while (match !== null) {
+      matches.push(parseInt(match[1], 10) - 1);
+      match = RECORD_REGEXP.exec(err.message);
+    }
+  }
+
+  return matches; 
+}
