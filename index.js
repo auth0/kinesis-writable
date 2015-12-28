@@ -144,7 +144,7 @@ KinesisStream.prototype._sendEntries = function () {
 KinesisStream.prototype._putRecords = function(requestContent) {
   const self = this;
 
-  this._kinesis.putRecords(requestContent, function (err, result) {
+  var req = this._kinesis.putRecords(requestContent, function (err, result) {
     self._queueWait = self._queueSendEntries();
     if (err) {
       return self._retryValidRecords(requestContent, err);
@@ -159,6 +159,8 @@ KinesisStream.prototype._putRecords = function(requestContent) {
         }
       });
     }
+
+    req.removeAllListeners();
   });
 };
 
@@ -241,12 +243,14 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
       return setImmediate(done);
     }
 
-    this._kinesis.putRecord(record, function (err) {
+    var req = this._kinesis.putRecord(record, function (err) {
       if (err) {
         err.streamName = record.StreamName;
         err.records = [ _.omit(record, 'StreamName') ];
       }
       done(err);
+
+      req.removeAllListeners();
     });
   } catch (e) {
     setImmediate(done, e);
