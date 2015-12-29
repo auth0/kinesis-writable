@@ -161,6 +161,8 @@ KinesisStream.prototype._putRecords = function(requestContent) {
     }
 
     req.removeAllListeners();
+    req.response.httpResponse.stream.removeAllListeners();
+    req.httpRequest.stream.removeAllListeners();
   });
 };
 
@@ -179,7 +181,7 @@ KinesisStream.prototype._retryValidRecords = function(requestContent, err) {
     failedRecords = _.pullAt(requestContent.Records, failedRecordIndexes);
 
     // now, try one more time with records that didn't fail.
-    self._putRecords({ 
+    self._putRecords({
       StreamName: requestContent.StreamName,
       Records: requestContent.Records
     });
@@ -251,6 +253,8 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
       done(err);
 
       req.removeAllListeners();
+      req.response.httpResponse.stream.removeAllListeners();
+      req.httpRequest.stream.removeAllListeners();
     });
   } catch (e) {
     setImmediate(done, e);
