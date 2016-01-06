@@ -159,7 +159,8 @@ KinesisStream.prototype._putRecords = function(requestContent) {
         }
       });
     }
-
+  })
+  .on('complete', function() {
     req.removeAllListeners();
     req.response.httpResponse.stream.removeAllListeners();
     req.httpRequest.stream.removeAllListeners();
@@ -251,7 +252,8 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
         err.records = [ _.omit(record, 'StreamName') ];
       }
       done(err);
-
+    })
+    .on('complete', function() {
       req.removeAllListeners();
       req.response.httpResponse.stream.removeAllListeners();
       req.httpRequest.stream.removeAllListeners();

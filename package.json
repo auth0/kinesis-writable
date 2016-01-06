@@ -8,7 +8,8 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "NODE_ENV=test istanbul cover _mocha -- -R spec --timeout 5000"
+    "test": "NODE_ENV=test mocha -R spec --timeout 5000",
+    "cover": "NODE_ENV=test istanbul cover _mocha -- -R spec --timeout 5000"
   },
   "dependencies": {
     "aws-sdk": "~2.1.43",
