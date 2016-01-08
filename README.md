@@ -1,4 +1,4 @@
-Kinesis writteable stream for bunyan.
+Kinesis writable stream for bunyan.
 
 ## Installation
 
@@ -41,7 +41,7 @@ new KinesisWritable({
   partitionKey:     "foo",
   buffer: {
     timeout: 1,                         // Messages will be send every second
-    lenght: 100,                        // or when 100 messages are in the queue
+    length: 100,                        // or when 100 messages are in the queue
     isPrioritaryMsg: function (msg) {   // or the message has a type > 40
       var entry = JSON.parse(msg);
       return entry.type > 40;
@@ -51,7 +51,7 @@ new KinesisWritable({
 ```
 
 
-`partitionKey` can be either an string or a function that accepts a mesage and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
+`partitionKey` can be either an string or a function that accepts a message and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
 
 ```javascript
 new KinesisWritable({
@@ -61,6 +61,23 @@ new KinesisWritable({
                       var entry = JSON.parse(msg);
                       return entry.level + '|' + entry.name;
                     }
+});
+```
+
+Send an AWS Kinesis stream instance when creating the Writable. Useful for setting up custom
+stuff like credentials, proxy etc and reuse the same AWS instance for multiple services.
+
+```javascript
+
+// Sample aws config
+var AWS = require('aws-sdk')
+var credentials = new AWS.SharedIniFileCredentials({profile: 'development'});
+AWS.config.credentials = credentials;
+
+new KinesisWritable({
+  streamName :      'MyKinesisStream',
+  partitionKey :    'foo',
+  kinesis : new AWS.Kinesis()
 });
 ```
 

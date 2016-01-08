@@ -1,11 +1,12 @@
 var stream = require('stream');
 var util = require('util');
-var AWS = require('aws-sdk');
 var _ = require('lodash');
 
 /**
  * [KinesisStream description]
  * @param {Object} params
+ * @param {Object} [params.kinesis] A pre-configured AWS Kinesis instance. If specified,
+                                   other SDK params such as credentials specified in params will not be used.
  * @param {string} [params.accessKeyId] AWS credentials
  * @param {string} [params.secretAccessKey] AWS credential
  * @param {string} [params.region] AWS region
@@ -37,7 +38,7 @@ function KinesisStream (params) {
   this._params = _.defaultsDeep(params || {}, {
     streamName: null,
     buffer: defaultBuffer,
-    partitionKey: function() {        // by default the partition key will generate 
+    partitionKey: function() {        // by default the partition key will generate
       return Date.now().toString();   // a "random" distribution between all shards
     }
   });
@@ -58,17 +59,29 @@ function KinesisStream (params) {
     this._params.buffer = defaultBuffer;
   }
 
+  // kinesis must be object
+  if (this._params.kinesis &&
+      typeof this._params.kinesis !== 'object') {
+    throw new Error("'kinesis' property should be an object");
+  }
+
   if (this._params.buffer) {
     this._queue = [];
     this._queueWait = this._queueSendEntries();
     this._params.buffer.isPrioritaryMsg = this._params.buffer.isPrioritaryMsg;
   }
 
-  this._kinesis = new AWS.Kinesis(_.pick(params, [
-    'accessKeyId',
-    'secretAccessKey',
-    'region',
-    'httpOptions']));
+  // If there is a Kinesis object, then use it.
+  if (params.kinesis) {
+      this._kinesis = params.kinesis
+  } else {
+      var AWS =  require('aws-sdk')
+      this._kinesis = new AWS.Kinesis(_.pick(params, [
+        'accessKeyId',
+        'secretAccessKey',
+        'region',
+        'httpOptions']));
+  }
 }
 
 util.inherits(KinesisStream, stream.Writable);
@@ -284,5 +297,5 @@ function getRecordIndexesFromError (err) {
     }
   }
 
-  return matches; 
+  return matches;
 }
