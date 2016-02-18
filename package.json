@@ -12,7 +12,7 @@
     "cover": "NODE_ENV=test istanbul cover _mocha -- -R spec --timeout 5000"
   },
   "dependencies": {
-    "aws-sdk": "~2.1.43",
+    "aws-sdk": "^2.2.36",
     "lodash": "~3.10.1"
   },
   "devDependencies": {
