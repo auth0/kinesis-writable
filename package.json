@@ -1,7 +1,7 @@
 {
   "name": "aws-kinesis-writable",
   "description": "A bunyan stream for kinesis.",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
   "repository": {
     "url": "git://github.com/auth0/kinesis-writable.git"
@@ -12,7 +12,7 @@
     "cover": "NODE_ENV=test istanbul cover _mocha -- -R spec --timeout 5000"
   },
   "dependencies": {
-    "aws-sdk": "~2.1.43",
+    "aws-sdk": "^2.2.36",
     "lodash": "~3.10.1"
   },
   "devDependencies": {
