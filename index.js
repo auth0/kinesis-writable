@@ -166,7 +166,10 @@ KinesisStream.prototype._putRecords = function(requestContent) {
     if (response_stream) {
       response_stream.removeAllListeners();
     }
-    req.httpRequest.stream.removeAllListeners();
+    var request_stream = req.httpRequest.stream;
+    if (request_stream) {
+      request_stream.removeAllListeners();
+    }
   });
 };
 
