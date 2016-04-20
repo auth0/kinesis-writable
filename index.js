@@ -13,6 +13,8 @@ var _ = require('lodash');
  * @param {string|function} params.partitionKey Constant string to use as partitionKey
  *                                              or a function that return the partitionKey
  *                                              based on a msg passed by argument
+ * @param {object} [params.getCredentialsFromIAMRole=false] Explictly tells `aws-sdk` to get credentials using an IAM role
+ * @param {object} [params.httpOptions={}] HTTP options that will be used on `aws-sdk` (e.g. timeout values)
  * @param {boolean|object} [params.buffer=true]
  * @param {number} [params.buffer.timeout] Max. number of seconds
  *                                         to wait before send msgs to stream
@@ -62,6 +64,13 @@ function KinesisStream (params) {
     this._queue = [];
     this._queueWait = this._queueSendEntries();
     this._params.buffer.isPrioritaryMsg = this._params.buffer.isPrioritaryMsg;
+  }
+
+  if (params.getCredentialsFromIAMRole) {
+    // increase the timeout to get credentials from the EC2 Metadata Service
+    AWS.config.credentials = new AWS.EC2MetadataCredentials({
+      httpOptions: params.httpOptions || { timeout: 5000 }
+    });
   }
 
   this._kinesis = new AWS.Kinesis(_.pick(params, [
