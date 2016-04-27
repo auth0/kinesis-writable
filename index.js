@@ -1,6 +1,7 @@
 var stream = require('stream');
 var util = require('util');
 var AWS = require('aws-sdk');
+var retry = require('retry');
 var _ = require('lodash');
 
 /**
@@ -153,31 +154,43 @@ KinesisStream.prototype._sendEntries = function () {
 KinesisStream.prototype._putRecords = function(requestContent) {
   const self = this;
 
-  var req = this._kinesis.putRecords(requestContent, function (err, result) {
-    self._queueWait = self._queueSendEntries();
-    if (err) {
-      return self._retryValidRecords(requestContent, err);
-    }
+  var operation = retry.operation({
+    retries: 5,
+    minTimeout: 500,
+    maxTimeout: 3000
+  });
 
-    if (result && result.FailedRecordCount) {
-      result.Records
-      .forEach(function (recordResult, index) {
-        if (recordResult.ErrorCode) {
-          recordResult.Record = requestContent.Records[index];
-          self.emit('errorRecord', recordResult);
+  operation.attempt(function() {
+    try {
+      var req = self._kinesis.putRecords(requestContent, function (err, result) {
+        self._queueWait = self._queueSendEntries();
+        if (err) {
+          return self._retryValidRecords(requestContent, err);
+        }
+
+        if (result && result.FailedRecordCount) {
+          result.Records
+          .forEach(function (recordResult, index) {
+            if (recordResult.ErrorCode) {
+              recordResult.Record = requestContent.Records[index];
+              self.emit('errorRecord', recordResult);
+            }
+          });
+        }
+      })
+      .on('complete', function() {
+        req.removeAllListeners();
+        var response_stream = req.response.httpResponse.stream;
+        if (response_stream) {
+          response_stream.removeAllListeners();
+        }
+        var request_stream = req.httpRequest.stream;
+        if (request_stream) {
+          request_stream.removeAllListeners();
         }
       });
-    }
-  })
-  .on('complete', function() {
-    req.removeAllListeners();
-    var response_stream = req.response.httpResponse.stream;
-    if (response_stream) {
-      response_stream.removeAllListeners();
-    }
-    var request_stream = req.httpRequest.stream;
-    if (request_stream) {
-      request_stream.removeAllListeners();
+    } catch(err) {
+      operation.retry(err);
     }
   });
 };
