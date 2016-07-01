@@ -1,8 +1,8 @@
-Kinesis writteable stream for bunyan.
+Kinesis writable stream for [bunyan](http://npmjs.com/package/bunyan).
 
 ## Installation
 
-```
+```sh
 npm install aws-kinesis-writable --save
 ```
 
@@ -36,13 +36,13 @@ This library uses by default an smart buffering approach. Messages are sent when
 Example:
 ```javascript
 new KinesisWritable({
-  region:          'AWS_REGION',
-  streamName:      'MyKinesisStream',
-  partitionKey:     "foo",
+  region: 'AWS_REGION',
+  streamName: 'MyKinesisStream',
+  partitionKey: 'foo',
   buffer: {
-    timeout: 1,                         // Messages will be send every second
-    lenght: 100,                        // or when 100 messages are in the queue
-    isPrioritaryMsg: function (msg) {   // or the message has a type > 40
+    timeout: 1, // Messages will be sent every second
+    lenght: 100, // or when 100 messages are in the queue
+    isPrioritaryMsg: function (msg) { // or the message has a type > 40
       var entry = JSON.parse(msg);
       return entry.type > 40;
     }
@@ -50,31 +50,66 @@ new KinesisWritable({
 });
 ```
 
-
-`partitionKey` can be either an string or a function that accepts a mesage and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
+`partitionKey` can be either an string or a function that accepts a message and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
 
 ```javascript
 new KinesisWritable({
-  region:          'AWS_REGION',
-  streamName:      'MyKinesisStream',
-  partitionKey:     function (msg) {
-                      var entry = JSON.parse(msg);
-                      return entry.level + '|' + entry.name;
-                    }
+  region: 'AWS_REGION',
+  streamName: 'MyKinesisStream',
+  partitionKey: function (msg) {
+    var entry = JSON.parse(msg);
+    return entry.level + '|' + entry.name;
+  }
 });
 ```
 
 `streamName` is the name of the Kinesis Stream.
 
 ### Methods
-`getStreamName()`: returns Stream's name.
 
-`setStreamName(name)`: set the name of the stream where messages will be send.
+* `getStreamName()`: returns the stream's name.
+* `setStreamName(name)`: set the name of the stream where messages will be send.
 
 ### Events
-`errorRecord`: Emitted once for each failed record at the `aws.kinesis.putRecords`'s response.
+
+* `errorRecord`: Emitted once for each failed record at the `aws.kinesis.putRecords`'s response.
+* `error`: Emitted every time an uncaught is thrown.
 
 **Note**: Amazon Credentials are not required. It will either use the environment variables, `~/.aws/credentials` or roles as every other aws sdk.
+
+## Kinesis Pool
+
+You can write to a pool of kinesis streams: only one of them will be used at a time, and the current stream will automatically switch to another in case of an error. This can be used as a failover mechanism in case Kinesis fails in one AWS region.
+
+### Usage:
+
+```javascript
+var streams = [
+  new KinesisWritable({
+    region: 'us-west-2',
+    streamName: 'foo'
+  }),
+  new KinesisWritable({
+    region: 'us-east-1',
+    streamName: 'bar'
+  }),
+  new KinesisWritable({
+    region: 'sa-east-1',
+    streamName: 'baz'
+  })
+];
+streams[0].primary = true;
+
+var kinesis = new KinesisStreamPool({
+  streams: streams
+});
+process.stdin.resume();
+process.stdin.pipe(kinesis);
+```
+
+### Events
+
+* `poolFailure`: Emitted every time you try to write and no stream is available.
 
 ## Issue Reporting
 
