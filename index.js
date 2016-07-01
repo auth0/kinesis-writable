@@ -92,8 +92,9 @@ function KinesisStream (params) {
 
 util.inherits(KinesisStream, stream.Writable);
 
-KinesisStream.prototype._logError = function (records, err) {
+KinesisStream.prototype._emitError = function (records, err, attempts) {
   err.records = records;
+  err.attempts = attempts;
   this.emit('error', err);
 };
 
@@ -169,13 +170,13 @@ KinesisStream.prototype._putRecords = function(requestContent) {
   const self = this;
 
   var operation = retry.operation(this._retryConfiguration);
-  operation.attempt(function() {
+  operation.attempt(function(currentAttempt) {
     try {
       var req = self._kinesis.putRecords(requestContent, function (err, result) {
         try {
           self._queueWait = self._queueSendEntries();
           if (err) {
-            return self._retryValidRecords(requestContent, err);
+            throw err;
           }
 
           if (result && result.FailedRecordCount) {
@@ -191,7 +192,7 @@ KinesisStream.prototype._putRecords = function(requestContent) {
           if (operation.retry(err)) {
             return;
           } else {
-            self._logError(requestContent, err);
+            self._emitError(requestContent, err, currentAttempt);
           }
         }
       })
@@ -210,7 +211,7 @@ KinesisStream.prototype._putRecords = function(requestContent) {
       if (operation.retry(err)) {
         return;
       } else {
-        self._logError(requestContent, err);
+        self._emitError(requestContent, err, currentAttempt);
       }
     }
   });
@@ -219,10 +220,10 @@ KinesisStream.prototype._putRecords = function(requestContent) {
 KinesisStream.prototype._retryValidRecords = function(requestContent, err) {
   const self = this;
 
-  // By default asumes that all records filed
+  // By default asumes that all records failed
   var failedRecords = requestContent.Records;
 
-  // try to find within the error, which records have fail.
+  // try to find within the error, which records have failed.
   var failedRecordIndexes = getRecordIndexesFromError(err);
 
   if (failedRecordIndexes.length > 0) {
@@ -253,7 +254,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
 
   var operation = retry.operation(this._retryConfiguration);
 
-  operation.attempt(function() {
+  operation.attempt(function(currentAttempt) {
     try {
       var obj, msg;
       if (Buffer.isBuffer(chunk)) {
@@ -315,7 +316,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
       if (operation.retry(err)) {
         return;
       } else {
-        self._logError(err.records, err);
+        self._emitError(err.records, err, currentAttempt);
         setImmediate(done, err);
       }
     }
@@ -328,12 +329,14 @@ KinesisStream.prototype.stop = function () {
 };
 
 module.exports = KinesisStream;
+module.exports.pool = require('./pool');
 
 
 const RECORD_REGEXP = /records\.(\d+)\.member\.data/g;
 
 function getRecordIndexesFromError (err) {
   var matches = [];
+  if (!err) return matches;
 
   if (err && _.isString(err.message)) {
     var match = RECORD_REGEXP.exec(err.message);
