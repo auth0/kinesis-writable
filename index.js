@@ -37,10 +37,17 @@ function KinesisStream (params) {
     maxBatchSize: MAX_BATCH_SIZE
   };
 
+  this._retryConfiguration = {
+    retries: 5,
+    factor: 1.2,
+    minTimeout: 5000,
+    randomize: true
+  };
+
   this._params = _.defaultsDeep(params || {}, {
     streamName: null,
     buffer: defaultBuffer,
-    partitionKey: function() {        // by default the partition key will generate 
+    partitionKey: function() {        // by default the partition key will generate
       return Date.now().toString();   // a "random" distribution between all shards
     }
   });
@@ -74,6 +81,8 @@ function KinesisStream (params) {
     });
   }
 
+  this._logger = console;
+
   this._kinesis = new AWS.Kinesis(_.pick(params, [
     'accessKeyId',
     'secretAccessKey',
@@ -82,6 +91,11 @@ function KinesisStream (params) {
 }
 
 util.inherits(KinesisStream, stream.Writable);
+
+KinesisStream.prototype._logError = function (records, err) {
+  err.records = records;
+  this.emit('error', err);
+};
 
 KinesisStream.prototype._queueSendEntries = function () {
   var self = this;
@@ -154,28 +168,31 @@ KinesisStream.prototype._sendEntries = function () {
 KinesisStream.prototype._putRecords = function(requestContent) {
   const self = this;
 
-  var operation = retry.operation({
-    retries: 5,
-    minTimeout: 500,
-    maxTimeout: 3000
-  });
-
+  var operation = retry.operation(this._retryConfiguration);
   operation.attempt(function() {
     try {
       var req = self._kinesis.putRecords(requestContent, function (err, result) {
-        self._queueWait = self._queueSendEntries();
-        if (err) {
-          return self._retryValidRecords(requestContent, err);
-        }
+        try {
+          self._queueWait = self._queueSendEntries();
+          if (err) {
+            return self._retryValidRecords(requestContent, err);
+          }
 
-        if (result && result.FailedRecordCount) {
-          result.Records
-          .forEach(function (recordResult, index) {
-            if (recordResult.ErrorCode) {
-              recordResult.Record = requestContent.Records[index];
-              self.emit('errorRecord', recordResult);
-            }
-          });
+          if (result && result.FailedRecordCount) {
+            result.Records
+            .forEach(function (recordResult, index) {
+              if (recordResult.ErrorCode) {
+                recordResult.Record = requestContent.Records[index];
+                self.emit('errorRecord', recordResult);
+              }
+            });
+          }
+        } catch(err) {
+          if (operation.retry(err)) {
+            return;
+          } else {
+            self._logError(requestContent, err);
+          }
         }
       })
       .on('complete', function() {
@@ -190,7 +207,11 @@ KinesisStream.prototype._putRecords = function(requestContent) {
         }
       });
     } catch(err) {
-      operation.retry(err);
+      if (operation.retry(err)) {
+        return;
+      } else {
+        self._logError(requestContent, err);
+      }
     }
   });
 };
@@ -201,7 +222,7 @@ KinesisStream.prototype._retryValidRecords = function(requestContent, err) {
   // By default asumes that all records filed
   var failedRecords = requestContent.Records;
 
-  // try to find within the error, whih records have fail.
+  // try to find within the error, which records have fail.
   var failedRecordIndexes = getRecordIndexesFromError(err);
 
   if (failedRecordIndexes.length > 0) {
@@ -223,72 +244,82 @@ KinesisStream.prototype._retryValidRecords = function(requestContent, err) {
 };
 
 KinesisStream.prototype._write = function (chunk, encoding, done) {
+  var self = this;
   if (!this._params.streamName) {
     return setImmediate (done, new Error('Stream\'s name was not set.'));
   }
 
   var isPrioMessage = this._params.buffer.isPrioritaryMsg;
 
-  try {
-    var obj, msg;
-    if (Buffer.isBuffer(chunk)) {
-      msg = chunk;
-      if (isPrioMessage){
-        if (encoding === 'buffer'){
-          obj = JSON.parse(chunk.toString());
-        } else {
-          obj = JSON.parse(chunk.toString(encoding));
+  var operation = retry.operation(this._retryConfiguration);
+
+  operation.attempt(function() {
+    try {
+      var obj, msg;
+      if (Buffer.isBuffer(chunk)) {
+        msg = chunk;
+        if (isPrioMessage){
+          if (encoding === 'buffer'){
+            obj = JSON.parse(chunk.toString());
+          } else {
+            obj = JSON.parse(chunk.toString(encoding));
+          }
         }
+      } else if (typeof chunk === 'string') {
+        msg = chunk;
+        if (isPrioMessage){
+          obj = JSON.parse(chunk);
+        }
+      } else {
+        obj = chunk;
+        msg = JSON.stringify(obj);
       }
-    } else if (typeof chunk === 'string') {
-      msg = chunk;
-      if (isPrioMessage){
-        obj = JSON.parse(chunk);
+
+      var record = self._mapEntry(msg, !!self._params.buffer);
+
+        if (self._params.buffer) {
+
+        // sends buffer when current current record will exceed bmax batch size
+        self._batch_size = (self._batch_size || 0) + msg.length;
+        if (self._batch_size > self._params.buffer.maxBatchSize) {
+          clearTimeout(self._queueWait);
+          self._sendEntries();
+        }
+
+        self._queue.push(record);
+
+        // sends buffer when current chunk is for prioritary entry
+        var shouldSendEntries = self._queue.length >= self._params.buffer.length ||  // queue reached max size
+                                (isPrioMessage && isPrioMessage(obj));            // msg is prioritary
+
+        if (shouldSendEntries) {
+          clearTimeout(self._queueWait);
+          self._sendEntries();
+        }
+        return setImmediate(done);
       }
-    } else {
-      obj = chunk;
-      msg = JSON.stringify(obj);
+
+      var req = self._kinesis.putRecord(record, function (err) {
+        if (err) {
+          err.streamName = record.StreamName;
+          err.records = [ _.omit(record, 'StreamName') ];
+        }
+        throw err;
+      })
+      .on('complete', function() {
+        req.removeAllListeners();
+        req.response.httpResponse.stream.removeAllListeners();
+        req.httpRequest.stream.removeAllListeners();
+      });
+    } catch(err) {
+      if (operation.retry(err)) {
+        return;
+      } else {
+        self._logError(err.records, err);
+        setImmediate(done, err);
+      }
     }
-
-    var record = this._mapEntry(msg, !!this._params.buffer);
-
-      if (this._params.buffer) {
-
-      // sends buffer when current current record will exceed bmax batch size
-      this._batch_size = (this._batch_size || 0) + msg.length;
-      if (this._batch_size > this._params.buffer.maxBatchSize) {
-        clearTimeout(this._queueWait);
-        this._sendEntries();
-      }
-
-      this._queue.push(record);
-
-      // sends buffer when current chunk is for prioritary entry
-      var shouldSendEntries = this._queue.length >= this._params.buffer.length ||  // queue reached max size
-                              (isPrioMessage && isPrioMessage(obj));            // msg is prioritary
-
-      if (shouldSendEntries) {
-        clearTimeout(this._queueWait);
-        this._sendEntries();
-      }
-      return setImmediate(done);
-    }
-
-    var req = this._kinesis.putRecord(record, function (err) {
-      if (err) {
-        err.streamName = record.StreamName;
-        err.records = [ _.omit(record, 'StreamName') ];
-      }
-      done(err);
-    })
-    .on('complete', function() {
-      req.removeAllListeners();
-      req.response.httpResponse.stream.removeAllListeners();
-      req.httpRequest.stream.removeAllListeners();
-    });
-  } catch (e) {
-    setImmediate(done, e);
-  }
+  });
 };
 
 KinesisStream.prototype.stop = function () {
@@ -312,5 +343,5 @@ function getRecordIndexesFromError (err) {
     }
   }
 
-  return matches; 
+  return matches;
 }
