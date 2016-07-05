@@ -25,10 +25,10 @@ var _ = require('lodash');
  * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true
  *                                                  when msg is prioritary
  * @param {object} [params.retryConfiguration={}]
- * @param {number} [params.retryConfiguration.retries=5] Number of retries to perform after a failed attempt
- * @param {number} [params.retryConfiguration.factor=1.2] The exponential factor to use
- * @param {number} [params.retryConfiguration.minTimeout=5000] The number of milliseconds before starting the first retry
- * @param {boolean} [params.retryConfiguration.randomize=true] Randomizes the timeouts by multiplying with a factor between 1 to 2
+ * @param {number} [params.retryConfiguration.retries=0] Number of retries to perform after a failed attempt
+ * @param {number} [params.retryConfiguration.factor=2] The exponential factor to use
+ * @param {number} [params.retryConfiguration.minTimeout=1000] The number of milliseconds before starting the first retry
+ * @param {boolean} [params.retryConfiguration.randomize=false] Randomizes the timeouts by multiplying with a factor between 1 to 2
  */
 
 var MAX_BATCH_SIZE = 5*1024*1024 - 1024; // 4.99MiB
@@ -43,10 +43,10 @@ function KinesisStream (params) {
   };
 
   this._retryConfiguration = params.retryConfiguration || {
-    retries: 5,
-    factor: 1.2,
-    minTimeout: 5000,
-    randomize: true
+    retries: 0,
+    factor: 2,
+    minTimeout: 1000,
+    randomize: false
   };
 
   this._params = _.defaultsDeep(params || {}, {
@@ -174,7 +174,7 @@ KinesisStream.prototype._sendEntries = function () {
 KinesisStream.prototype._putRecords = function(requestContent) {
   const self = this;
 
-  var operation = retry.operation(this._retryConfiguration);
+  var operation = this._getRetryOperation();
   operation.attempt(function(currentAttempt) {
     try {
       var req = self._kinesis.putRecords(requestContent, function (err, result) {
@@ -257,8 +257,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
 
   var isPrioMessage = this._params.buffer.isPrioritaryMsg;
 
-  var operation = retry.operation(this._retryConfiguration);
-
+  var operation = this._getRetryOperation();
   operation.attempt(function(currentAttempt) {
     try {
       var obj, msg;
@@ -331,6 +330,21 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
 KinesisStream.prototype.stop = function () {
   clearTimeout(this._queueWait);
   this._queue = [];
+};
+
+KinesisStream.prototype._getRetryOperation = function () {
+  if (this._retryConfiguration && this._retryConfiguration.retries > 0) {
+    return retry.operation(this._retryConfiguration);
+  } else {
+    return {
+      attempt: function(cb) {
+        return cb(1);
+      },
+      retry: function () {
+        return false;
+      }
+    };
+  }
 };
 
 module.exports = KinesisStream;
