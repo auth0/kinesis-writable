@@ -24,6 +24,11 @@ var _ = require('lodash');
  * @param {number} [params.buffer.maxBatchSize] Max. size in bytes of the batch sent to Kinesis. Default 5242880 (5MiB)
  * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true
  *                                                  when msg is prioritary
+ * @param {object} [params.retryConfiguration={}]
+ * @param {number} [params.retryConfiguration.retries=5] Number of retries to perform after a failed attempt
+ * @param {number} [params.retryConfiguration.factor=1.2] The exponential factor to use
+ * @param {number} [params.retryConfiguration.minTimeout=5000] The number of milliseconds before starting the first retry
+ * @param {boolean} [params.retryConfiguration.randomize=true] Randomizes the timeouts by multiplying with a factor between 1 to 2
  */
 
 var MAX_BATCH_SIZE = 5*1024*1024 - 1024; // 4.99MiB
@@ -37,7 +42,7 @@ function KinesisStream (params) {
     maxBatchSize: MAX_BATCH_SIZE
   };
 
-  this._retryConfiguration = {
+  this._retryConfiguration = params.retryConfiguration || {
     retries: 5,
     factor: 1.2,
     minTimeout: 5000,
