@@ -181,6 +181,7 @@ KinesisStream.prototype._putRecords = function(requestContent) {
         try {
           self._queueWait = self._queueSendEntries();
           if (err) {
+            if (!err.records) err.records = requestContent.Records;
             throw err;
           }
 
