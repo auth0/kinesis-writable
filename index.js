@@ -24,6 +24,11 @@ var _ = require('lodash');
  * @param {number} [params.buffer.maxBatchSize] Max. size in bytes of the batch sent to Kinesis. Default 5242880 (5MiB)
  * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true
  *                                                  when msg is prioritary
+ * @param {object} [params.retryConfiguration={}]
+ * @param {number} [params.retryConfiguration.retries=0] Number of retries to perform after a failed attempt
+ * @param {number} [params.retryConfiguration.factor=2] The exponential factor to use
+ * @param {number} [params.retryConfiguration.minTimeout=1000] The number of milliseconds before starting the first retry
+ * @param {boolean} [params.retryConfiguration.randomize=false] Randomizes the timeouts by multiplying with a factor between 1 to 2
  */
 
 var MAX_BATCH_SIZE = 5*1024*1024 - 1024; // 4.99MiB
@@ -37,11 +42,11 @@ function KinesisStream (params) {
     maxBatchSize: MAX_BATCH_SIZE
   };
 
-  this._retryConfiguration = {
-    retries: 5,
-    factor: 1.2,
-    minTimeout: 5000,
-    randomize: true
+  this._retryConfiguration = params.retryConfiguration || {
+    retries: 0,
+    factor: 2,
+    minTimeout: 1000,
+    randomize: false
   };
 
   this._params = _.defaultsDeep(params || {}, {
@@ -92,8 +97,9 @@ function KinesisStream (params) {
 
 util.inherits(KinesisStream, stream.Writable);
 
-KinesisStream.prototype._logError = function (records, err) {
+KinesisStream.prototype._emitError = function (records, err, attempts) {
   err.records = records;
+  err.attempts = attempts;
   this.emit('error', err);
 };
 
@@ -168,14 +174,15 @@ KinesisStream.prototype._sendEntries = function () {
 KinesisStream.prototype._putRecords = function(requestContent) {
   const self = this;
 
-  var operation = retry.operation(this._retryConfiguration);
-  operation.attempt(function() {
+  var operation = this._getRetryOperation();
+  operation.attempt(function(currentAttempt) {
     try {
       var req = self._kinesis.putRecords(requestContent, function (err, result) {
         try {
           self._queueWait = self._queueSendEntries();
           if (err) {
-            return self._retryValidRecords(requestContent, err);
+            if (!err.records) err.records = requestContent.Records;
+            throw err;
           }
 
           if (result && result.FailedRecordCount) {
@@ -191,7 +198,7 @@ KinesisStream.prototype._putRecords = function(requestContent) {
           if (operation.retry(err)) {
             return;
           } else {
-            self._logError(requestContent, err);
+            self._emitError(requestContent, err, currentAttempt);
           }
         }
       })
@@ -210,7 +217,7 @@ KinesisStream.prototype._putRecords = function(requestContent) {
       if (operation.retry(err)) {
         return;
       } else {
-        self._logError(requestContent, err);
+        self._emitError(requestContent, err, currentAttempt);
       }
     }
   });
@@ -219,10 +226,10 @@ KinesisStream.prototype._putRecords = function(requestContent) {
 KinesisStream.prototype._retryValidRecords = function(requestContent, err) {
   const self = this;
 
-  // By default asumes that all records filed
+  // By default asumes that all records failed
   var failedRecords = requestContent.Records;
 
-  // try to find within the error, which records have fail.
+  // try to find within the error, which records have failed.
   var failedRecordIndexes = getRecordIndexesFromError(err);
 
   if (failedRecordIndexes.length > 0) {
@@ -251,9 +258,8 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
 
   var isPrioMessage = this._params.buffer.isPrioritaryMsg;
 
-  var operation = retry.operation(this._retryConfiguration);
-
-  operation.attempt(function() {
+  var operation = this._getRetryOperation();
+  operation.attempt(function(currentAttempt) {
     try {
       var obj, msg;
       if (Buffer.isBuffer(chunk)) {
@@ -315,7 +321,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
       if (operation.retry(err)) {
         return;
       } else {
-        self._logError(err.records, err);
+        self._emitError(err.records, err, currentAttempt);
         setImmediate(done, err);
       }
     }
@@ -327,13 +333,30 @@ KinesisStream.prototype.stop = function () {
   this._queue = [];
 };
 
+KinesisStream.prototype._getRetryOperation = function () {
+  if (this._retryConfiguration && this._retryConfiguration.retries > 0) {
+    return retry.operation(this._retryConfiguration);
+  } else {
+    return {
+      attempt: function(cb) {
+        return cb(1);
+      },
+      retry: function () {
+        return false;
+      }
+    };
+  }
+};
+
 module.exports = KinesisStream;
+module.exports.pool = require('./pool');
 
 
 const RECORD_REGEXP = /records\.(\d+)\.member\.data/g;
 
 function getRecordIndexesFromError (err) {
   var matches = [];
+  if (!err) return matches;
 
   if (err && _.isString(err.message)) {
     var match = RECORD_REGEXP.exec(err.message);
