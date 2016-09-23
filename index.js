@@ -281,9 +281,9 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
         msg = JSON.stringify(obj);
       }
 
-      var record = self._mapEntry(msg, !!self._params.buffer);
+      var record = self._mapEntry(msg, self._params.buffer.length!=1);
 
-        if (self._params.buffer) {
+      if (self._params.buffer.length!=1) {
 
         // sends buffer when current current record will exceed bmax batch size
         self._batch_size = (self._batch_size || 0) + msg.length;
@@ -305,24 +305,30 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
         return setImmediate(done);
       }
 
-      var req = self._kinesis.putRecord(record, function (err) {
+      var req = self._kinesis.putRecord(record, function (err,data) {
         if (err) {
           err.streamName = record.StreamName;
           err.records = [ _.omit(record, 'StreamName') ];
+          throw err;
         }
-        throw err;
-      })
-      .on('complete', function() {
+      }).on('complete', function() {
         req.removeAllListeners();
-        req.response.httpResponse.stream.removeAllListeners();
-        req.httpRequest.stream.removeAllListeners();
+        var response_stream = req.response.httpResponse.stream;
+        if (response_stream) {
+          response_stream.removeAllListeners();
+        }
+        var request_stream = req.httpRequest.stream;
+        if (request_stream) {
+          request_stream.removeAllListeners();
+        }
+        return setImmediate(done);
       });
     } catch(err) {
       if (operation.retry(err)) {
         return;
       } else {
         self._emitError(err.records, err, currentAttempt);
-        setImmediate(done, err);
+        return setImmediate(done, err);
       }
     }
   });

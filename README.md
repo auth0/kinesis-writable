@@ -41,14 +41,15 @@ new KinesisWritable({
   partitionKey: 'foo',
   buffer: {
     timeout: 1, // Messages will be sent every second
-    lenght: 100, // or when 100 messages are in the queue
-    isPrioritaryMsg: function (msg) { // or the message has a type > 40
-      var entry = JSON.parse(msg);
-      return entry.type > 40;
+    length: 100, // or when 100 messages are in the queue
+    isPrioritaryMsg: function (entry) { // or if the log entry has a level > 40
+      return entry.level > 40;
     }
   }
 });
 ```
+
+Note that `AWS.Kinesis.putRecord` is triggered instead of `AWS.Kinesis.putRecords` if `buffer.length==1`. `buffer.length` defaults to 5.
 
 `partitionKey` can be either an string or a function that accepts a message and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
 
