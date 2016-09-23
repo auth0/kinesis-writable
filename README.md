@@ -51,7 +51,7 @@ new KinesisWritable({
 
 Note that `AWS.Kinesis.putRecord` is triggered instead of `AWS.Kinesis.putRecords` if `buffer.length==1`. `buffer.length` defaults to 5.
 
-`partitionKey` can be either an string or a function that accepts a message and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
+`partitionKey` can be either a string or a function that accepts a message and returns a string. By default it is a function that returns the current EPOCH (Date.now()). Example:
 
 ```javascript
 new KinesisWritable({
