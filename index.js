@@ -22,8 +22,8 @@ var _ = require('lodash');
  * @param {number} [params.buffer.length] Max. number of msgs to queue
  *                                        before send them to stream.
  * @param {number} [params.buffer.maxBatchSize] Max. size in bytes of the batch sent to Kinesis. Default 5242880 (5MiB)
- * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true
- *                                                  when msg is prioritary
+ * @param {@function} [params.buffer.isPriorityMsg] Evaluates a message and returns true
+ *                                                  when msg is priority and should be sent immediately
  * @param {object} [params.retryConfiguration={}]
  * @param {number} [params.retryConfiguration.retries=0] Number of retries to perform after a failed attempt
  * @param {number} [params.retryConfiguration.factor=2] The exponential factor to use
@@ -76,7 +76,7 @@ function KinesisStream (params) {
   if (this._params.buffer) {
     this._queue = [];
     this._queueWait = this._queueSendEntries();
-    this._params.buffer.isPrioritaryMsg = this._params.buffer.isPrioritaryMsg;
+    this._params.buffer.isPriorityMsg = this._params.buffer.isPriorityMsg || this._params.buffer.isPrioritaryMsg;
   }
 
   if (params.getCredentialsFromIAMRole) {
@@ -256,7 +256,7 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
     return setImmediate (done, new Error('Stream\'s name was not set.'));
   }
 
-  var isPrioMessage = this._params.buffer.isPrioritaryMsg;
+  var isPrioMessage = this._params.buffer.isPriorityMsg;
 
   var operation = this._getRetryOperation();
   operation.attempt(function(currentAttempt) {
@@ -294,9 +294,9 @@ KinesisStream.prototype._write = function (chunk, encoding, done) {
 
         self._queue.push(record);
 
-        // sends buffer when current chunk is for prioritary entry
+        // sends buffer when current chunk is for priority entry
         var shouldSendEntries = self._queue.length >= self._params.buffer.length ||  // queue reached max size
-                                (isPrioMessage && isPrioMessage(obj));            // msg is prioritary
+                                (isPrioMessage && isPrioMessage(obj));            // msg is priority
 
         if (shouldSendEntries) {
           clearTimeout(self._queueWait);

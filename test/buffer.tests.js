@@ -11,7 +11,7 @@ const kinesis = new AWS.Kinesis({
 
 const STREAM_NAME   = 'vagrant_testing';
 
-function isPrioritaryMsg(entry) {
+function isPriorityMsg(entry) {
   return entry.level >= 40;
 }
 
@@ -43,7 +43,7 @@ describe('with buffering', function () {
       timeout: 5,
       length: 10,
       maxBatchSize: 5241856,
-      isPrioritaryMsg: undefined
+      isPriorityMsg: undefined
     };
 
     it('should be able to create an instance', function() {
@@ -301,11 +301,37 @@ describe('with buffering', function () {
       }, 500);
     });
 
-    it('should send the events after an error level entry', function (done) {
+    it('should send the events after an error level entry, using isPriorityMsg', function (done) {
       var bk = new KinesisStream({
         region: 'us-west-1',
         streamName: STREAM_NAME,
-        buffer: { isPrioritaryMsg: isPrioritaryMsg },
+        buffer: { isPriorityMsg: isPriorityMsg },
+        partitionKey: 'test-123'
+      });
+
+
+      bk._write(JSON.stringify({foo: 'bar'}), null, _.noop);
+      bk._write(JSON.stringify({error: 'error', level: 50}), null, _.noop);
+
+
+      setTimeout(function () {
+        kinesis.getRecords({
+          ShardIterator: iterator,
+          Limit: 3
+        }, function (err, data) {
+          bk.stop();
+          if (err) return done(err);
+          assert.equal(data.Records.length, 2);
+          done();
+        });
+      }, 500);
+    });
+
+    it('should send the events after an error level entry, using backwards-compatible isPrioritaryMsg', function (done) {
+      var bk = new KinesisStream({
+        region: 'us-west-1',
+        streamName: STREAM_NAME,
+        buffer: { isPrioritaryMsg: isPriorityMsg },
         partitionKey: 'test-123'
       });
 
