@@ -42,7 +42,7 @@ new KinesisWritable({
   buffer: {
     timeout: 1, // Messages will be sent every second
     lenght: 100, // or when 100 messages are in the queue
-    isPrioritaryMsg: function (msg) { // or the message has a type > 40
+    hasPriority: function (msg) { // or the message has a type > 40
       var entry = JSON.parse(msg);
       return entry.type > 40;
     }
@@ -65,51 +65,11 @@ new KinesisWritable({
 
 `streamName` is the name of the Kinesis Stream.
 
-### Methods
-
-* `getStreamName()`: returns the stream's name.
-* `setStreamName(name)`: set the name of the stream where messages will be send.
-
 ### Events
 
-* `errorRecord`: Emitted once for each failed record at the `aws.kinesis.putRecords`'s response.
-* `error`: Emitted every time an uncaught is thrown.
+* `error`: Emitted every time records are failed to be written.
 
 **Note**: Amazon Credentials are not required. It will either use the environment variables, `~/.aws/credentials` or roles as every other aws sdk.
-
-## Kinesis Pool
-
-You can write to a pool of kinesis streams: only one of them will be used at a time, and the current stream will automatically switch to another in case of an error. This can be used as a failover mechanism in case Kinesis fails in one AWS region.
-
-### Usage:
-
-```javascript
-var streams = [
-  new KinesisWritable({
-    region: 'us-west-2',
-    streamName: 'foo'
-  }),
-  new KinesisWritable({
-    region: 'us-east-1',
-    streamName: 'bar'
-  }),
-  new KinesisWritable({
-    region: 'sa-east-1',
-    streamName: 'baz'
-  })
-];
-streams[0].primary = true;
-
-var kinesis = new KinesisStreamPool({
-  streams: streams
-});
-process.stdin.resume();
-process.stdin.pipe(kinesis);
-```
-
-### Events
-
-* `poolFailure`: Emitted every time you try to write and no stream is available.
 
 ## Issue Reporting
 
