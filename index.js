@@ -18,9 +18,11 @@ const AWS = require('aws-sdk');
  *                                         to wait before send msgs to stream
  * @param {number} [params.buffer.length] Max. number of msgs to queue
  *                                        before send them to stream.
- * @param {boolean} [params.buffer.retry] Retry sending the message if AWS returns a failure
  * @param {@function} [params.buffer.isPrioritaryMsg] Evaluates a message and returns true if msg has priority (to be deprecated)
  * @param {@function} [params.buffer.hasPriority] Evaluates a message and returns true if msg has priority
+ * @param {@function} [params.buffer.retry.retries] Attempts to be made to flush a batch
+ * @param {@function} [params.buffer.retry.minTimeout] Min time to wait between attempts
+ * @param {@function} [params.buffer.retry.maxTimeout] Max time to wait between attempts
  */
 
 const defaultBuffer = {
@@ -28,6 +30,11 @@ const defaultBuffer = {
   length: 10,
   hasPriority: function() {
     return false;
+  },
+  retry: {
+    retries: 2,
+    minTimeout: 300,
+    maxTimeout: 500
   }
 };
 
@@ -99,11 +106,7 @@ KinesisStream.prototype.dispatch = function(records, cb) {
     return cb ? cb() : null;
   }
 
-  const operation = retry.operation({
-    retries: 2,
-    minTimeout: 300,
-    maxTimeout: 500
-  });
+  const operation = retry.operation(this.buffer.retry);
 
   const partitionKey = this.partitionKey();
 

@@ -94,7 +94,6 @@ describe('KinesisStream', function() {
       });
     });
     it('should retry if #putRecords failed', function(done) {
-      this.timeout(5000);
       const message = {test: true};
       const stub = sinon.stub(ks, 'putRecords').callsFake(function(r, cb) {
         return cb(new Error());
