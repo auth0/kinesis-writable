@@ -2,6 +2,7 @@ const util = require('util');
 const assert = require('assert');
 const Writable = require('stream').Writable;
 
+const retry = require('retry');
 const AWS = require('aws-sdk');
 
 /**
@@ -25,7 +26,6 @@ const AWS = require('aws-sdk');
 const defaultBuffer = {
   timeout: 5,
   length: 10,
-  retry: true,
   hasPriority: function() {
     return false;
   }
@@ -74,18 +74,18 @@ function parseChunk(chunk) {
 KinesisStream.prototype._write = function(chunk, enc, next) {
   chunk = parseChunk(chunk);
 
-  if (this.hasPriority(chunk)) {
-    this.dispatch([chunk]);
-    return next();
+  const hasPriority = this.hasPriority(chunk);
+  if (hasPriority) {
+    this.recordsQueue.unshift(chunk);
+  } else {
+    this.recordsQueue.push(chunk);
   }
-
-  this.recordsQueue.push(chunk);
 
   if (this.timer) {
     clearTimeout(this.timer);
   }
 
-  if (this.recordsQueue.length >= this.buffer.length) {
+  if (this.recordsQueue.length >= this.buffer.length || hasPriority) {
     this.flush();
   } else {
     this.timer = setTimeout(this.flush.bind(this), this.buffer.timeout * 1000);
@@ -95,36 +95,44 @@ KinesisStream.prototype._write = function(chunk, enc, next) {
 };
 
 KinesisStream.prototype.dispatch = function(records, cb) {
-  var self = this;
-
   if (records.length === 0) {
     return cb ? cb() : null;
   }
 
-  const req = this.kinesis.putRecords({
-    StreamName: this.streamName,
-    Records: records.map(function(record) {
-      return { Data: JSON.stringify(record), PartitionKey: self.partitionKey() };
-    })
-  }, function(err, data) {
-    if (err) {
-      var failedRecords = [];
-      data.Records.forEach(function(record, idx) {
-        if (record.ErrorCode) {
-          failedRecords.push(records[idx]);
-        }
-      });
+  const operation = retry.operation({
+    retries: 2,
+    minTimeout: 300,
+    maxTimeout: 500
+  });
 
-      if (self.buffer.retry) {
-        failedRecords.forEach(self.write.bind(self));
+  const partitionKey = this.partitionKey();
+
+  const formattedRecords = records.map((record) => {
+    return { Data: JSON.stringify(record), PartitionKey: partitionKey };
+  });
+
+  operation.attempt(() => {
+    this.putRecords(formattedRecords, (err) => {
+      if (operation.retry(err)) {
+        return;
       }
 
-      self.emitError(err, failedRecords);
-    }
-    if (cb) {
-      return cb(err);
-    }
+      if (err) {
+        this.emitRecordError(err, records);
+      }
+
+      if (cb) {
+        return cb(err ? operation.mainError() : null);
+      }
+    });
   });
+};
+
+KinesisStream.prototype.putRecords = function(records, cb) {
+  const req = this.kinesis.putRecords({
+    StreamName: this.streamName,
+    Records: records
+  }, cb);
 
   // remove all listeners which end up leaking
   req.on('complete', function() {
@@ -138,7 +146,7 @@ KinesisStream.prototype.flush = function() {
   this.dispatch(this.recordsQueue.splice(0, this.buffer.length));
 };
 
-KinesisStream.prototype.emitError = function (err, records) {
+KinesisStream.prototype.emitRecordError = function (err, records) {
   err.records = records;
   this.emit('error', err);
 };

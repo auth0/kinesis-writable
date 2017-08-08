@@ -93,23 +93,23 @@ describe('KinesisStream', function() {
         done();
       });
     });
-    it('should emit and requeue the failed records', function(done) {
+    it('should retry if #putRecords failed', function(done) {
+      this.timeout(5000);
       const message = {test: true};
-      ks.write = sinon.spy();
-      kinesis.putRecords = function(params, cb) {
-        expect(params.StreamName).to.equal('test');
-        expect(params.Records[0].Data).to.equal(JSON.stringify(message));
-        return cb(new Error(), { Records: [{}, {ErrorCode: 'ProvisionedThroughputExceededException'}]});
-      };
+      const stub = sinon.stub(ks, 'putRecords').callsFake(function(r, cb) {
+        return cb(new Error());
+      });
+
       ks.on('error', function(err) {
         expect(err).to.exist;
-        expect(err.records.length).to.equal(1);
-        expect(ks.write.calledOnce).to.be.true;
-        expect(ks.write.calledWith(message)).to.be.true;
+        expect(err.records.length).to.equal(2);
+        expect(stub.calledThrice).to.be.true;
+      });
+
+      ks.dispatch([message, message], function(err) {
+        expect(err).to.exist;
         done();
       });
-      ks.dispatch([message, message]);
     });
   });
-  //describe('#emitError');
 });
