@@ -4,6 +4,7 @@ const Writable = require('stream').Writable;
 
 const retry = require('retry');
 const AWS = require('aws-sdk');
+const merge = require('lodash.merge');
 
 /**
  * [KinesisStream description]
@@ -42,7 +43,7 @@ function KinesisStream (params) {
   assert(params.streamName, 'streamName required');
 
   this.streamName = params.streamName;
-  this.buffer = params.buffer || defaultBuffer;
+  this.buffer = merge(defaultBuffer, params.buffer);
   this.partitionKey = params.partitionKey || function getPartitionKey() {
     return Date.now().toString();
   };
