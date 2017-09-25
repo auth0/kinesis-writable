@@ -51,7 +51,7 @@ function KinesisStream (params) {
   this.hasPriority = this.buffer.isPrioritaryMsg || this.buffer.hasPriority;
 
   // increase the timeout to get credentials from the EC2 Metadata Service
-  AWS.config.credentials = new AWS.EC2MetadataCredentials({
+  AWS.config.credentials = params.credentials || new AWS.EC2MetadataCredentials({
     httpOptions: params.httpOptions || { timeout: 5000 }
   });
 
@@ -142,7 +142,7 @@ KinesisStream.prototype.putRecords = function(records, cb) {
   req.on('complete', function() {
     req.removeAllListeners();
     req.response.httpResponse.stream.removeAllListeners();
-    req.httpRequest.stream.removeAllListeners();
+    req.httpRequest.stream.removeAllListeners && req.httpRequest.stream.removeAllListeners();
   });
 };
 
