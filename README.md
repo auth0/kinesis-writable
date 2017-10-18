@@ -65,6 +65,7 @@ new KinesisWritable({
 
 `streamName` is the name of the Kinesis Stream.
 
+`credentials` is an existing credentials object e.g. a successful `CognitoIdentityCredentials` request
 ### Events
 
 * `error`: Emitted every time records are failed to be written.
