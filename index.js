@@ -141,7 +141,7 @@ KinesisStream.prototype.putRecords = function(records, cb) {
   // remove all listeners which end up leaking
   req.on('complete', function() {
     req.removeAllListeners();
-    req.response.httpResponse.stream.removeAllListeners();
+    req.response.httpResponse.stream && req.response.httpResponse.stream.removeAllListeners();
     req.httpRequest.stream.removeAllListeners && req.httpRequest.stream.removeAllListeners();
   });
 };
