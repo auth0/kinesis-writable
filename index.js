@@ -142,7 +142,7 @@ KinesisStream.prototype.putRecords = function(records, cb) {
   req.on('complete', function() {
     req.removeAllListeners();
     req.response.httpResponse.stream && req.response.httpResponse.stream.removeAllListeners();
-    req.httpRequest.stream.removeAllListeners();
+    req.httpRequest.stream && req.httpRequest.stream.removeAllListeners();
   });
 };
 
