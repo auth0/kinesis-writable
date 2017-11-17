@@ -109,9 +109,10 @@ KinesisStream.prototype.dispatch = function(records, cb) {
 
   const operation = retry.operation(this.buffer.retry);
 
-  const partitionKey = this.partitionKey();
-
   const formattedRecords = records.map((record) => {
+    const partitionKey = typeof this.partitionKey === 'function'
+	  ? this.partitionKey(record)
+	  : this.partitionKey;
     return { Data: JSON.stringify(record), PartitionKey: partitionKey };
   });
 
