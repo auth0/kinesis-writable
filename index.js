@@ -60,6 +60,7 @@ function KinesisStream (params) {
   this.kinesis = params.kinesis || new AWS.Kinesis({
     accessKeyId: params.accessKeyId,
     secretAccessKey: params.secretAccessKey,
+    sessionToken: params.sessionToken,
     region: params.region,
     httpOptions: params.httpOptions
   });
