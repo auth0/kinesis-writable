@@ -12,6 +12,7 @@ const merge = require('lodash.merge');
  * @param {string} [params.accessKeyId] AWS credentials
  * @param {string} [params.secretAccessKey] AWS credential
  * @param {string} [params.region] AWS region
+ * @param {string} [params.endpoint] AWS HTTP endpoint
  * @param {string} params.streamName AWS Knesis stream name
  * @param {function} params.partitionKey function that return the partitionKey based on a msg passed by argument
  * @param {object} [params.httpOptions={}] HTTP options that will be used on `aws-sdk` (e.g. timeout values)
@@ -61,6 +62,7 @@ function KinesisStream (params) {
     accessKeyId: params.accessKeyId,
     secretAccessKey: params.secretAccessKey,
     region: params.region,
+    endpoint: params.endpoint,
     httpOptions: params.httpOptions
   });
 
