@@ -20,6 +20,21 @@ describe('KinesisStream', function() {
       expect(ks.recordsQueue).to.exist;
       expect(ks.partitionKey).to.be.function;
     });
+    it('should build a stream with configured endpoint and objectMode', function() {
+      const ks = new KinesisStream({
+        streamName: 'test',
+        objectMode: true,
+        kinesis: {
+          endpoint: "http://somehost:1234"
+        }
+      });
+
+      expect(ks.hasPriority).to.be.function;
+      expect(ks.recordsQueue).to.exist;
+      expect(ks.partitionKey).to.be.function;
+      expect(ks.kinesis.endpoint).to.equal("http://somehost:1234");
+      expect(ks._writableState.objectMode).to.equal(true);
+    });
   });
   describe('#_write', function() {
     var ks;
