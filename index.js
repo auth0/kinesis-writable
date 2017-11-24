@@ -55,7 +55,7 @@ function KinesisStream (params) {
 
   // increase the timeout to get credentials from the EC2 Metadata Service
   AWS.config.credentials = new AWS.EC2MetadataCredentials({
-    httpOptions: params.httpOptions || { timeout: 5000 }
+    httpOptions: { timeout: 5000 }
   });
 
   this.recordsQueue = [];
