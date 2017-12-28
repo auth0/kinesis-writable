@@ -9,8 +9,10 @@ const merge = require('lodash.merge');
 /**
  * [KinesisStream description]
  * @param {Object} params
- * @param {string} [params.accessKeyId] AWS credentials
- * @param {string} [params.secretAccessKey] AWS credential
+ * @param {string} [params.accessKeyId] AWS access key
+ * @param {string} [params.secretAccessKey] AWS secret
+ * @param {string} [params.sessionToken] AWS session token
+ * @param {string} [params.credentials] AWS credentials (in lieu of separate credentials)
  * @param {string} [params.region] AWS region
  * @param {string} [params.endpoint] AWS HTTP endpoint
  * @param {string} [params.objectMode] True if Javascript objects can be directly written to Kinesis
@@ -64,6 +66,7 @@ function KinesisStream (params) {
     accessKeyId: params.accessKeyId,
     secretAccessKey: params.secretAccessKey,
     sessionToken: params.sessionToken,
+    credentials: params.credentials,
     region: params.region,
     endpoint: params.endpoint,
     objectMode: params.objectMode,
