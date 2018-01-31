@@ -16,9 +16,9 @@ describe('KinesisStream', function() {
         kinesis: {}
       });
 
-      expect(ks.hasPriority).to.be.function;
+      expect(ks.hasPriority).to.be.a('function');
       expect(ks.recordsQueue).to.exist;
-      expect(ks.partitionKey).to.be.function;
+      expect(ks.partitionKey).to.be.string;
     });
   });
   describe('#_write', function() {
