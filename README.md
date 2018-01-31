@@ -31,7 +31,7 @@ This library uses by default an smart buffering approach. Messages are sent when
 
 -  X seconds after the last batch of messages sent. Default: 5 seconds.
 -  X messages are queued waiting to be sent. Default: 10 messages.
--  a message is prioritary. Default: all messages are not prioritary
+-  a message has priority. Default: all messages do no have priority
 
 Example:
 ```javascript
@@ -41,7 +41,7 @@ new KinesisWritable({
   partitionKey: 'foo',
   buffer: {
     timeout: 1, // Messages will be sent every second
-    lenght: 100, // or when 100 messages are in the queue
+    length: 100, // or when 100 messages are in the queue
     hasPriority: function (msg) { // or the message has a type > 40
       var entry = JSON.parse(msg);
       return entry.type > 40;
