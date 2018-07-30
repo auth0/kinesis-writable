@@ -5,6 +5,7 @@ const Writable = require('stream').Writable;
 const retry = require('retry');
 const AWS = require('aws-sdk');
 const merge = require('lodash.merge');
+const cb = require('cb');
 
 /**
  * [KinesisStream description]
@@ -142,17 +143,22 @@ KinesisStream.prototype.dispatch = function(records, cb) {
   });
 };
 
-KinesisStream.prototype.putRecords = function(records, cb) {
+KinesisStream.prototype.putRecords = function(records, callback) {
+  callback = cb(callback).once();
+
   const req = this.kinesis.putRecords({
     StreamName: this.streamName,
     Records: records
-  }, cb);
+  }, callback);
 
   // remove all listeners which end up leaking
   req.on('complete', function() {
     req.removeAllListeners();
     req.response.httpResponse.stream && req.response.httpResponse.stream.removeAllListeners();
-    req.httpRequest.stream && req.httpRequest.stream.removeAllListeners();
+    if (req.httpRequest.stream) {
+      req.httpRequest.stream.removeAllListeners();
+      req.httpRequest.stream.once('error', () => {});
+    }
   });
 };
 
