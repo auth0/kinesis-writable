@@ -2,6 +2,7 @@
 
 const sinon = require('sinon');
 const assert = require('assert');
+const EventEmitter = require('events').EventEmitter;
 const KinesisStream = require('../');
 const expect = require('chai').expect;
 
@@ -29,9 +30,9 @@ describe('KinesisStream', function() {
         }
       });
 
-      expect(ks.hasPriority).to.be.function;
+      expect(ks.hasPriority).to.be.a('function');
       expect(ks.recordsQueue).to.exist;
-      expect(ks.partitionKey).to.be.function;
+      expect(ks.partitionKey).to.be.a('function');
       expect(ks.kinesis.endpoint).to.equal("http://somehost:1234");
       expect(ks._writableState.objectMode).to.equal(true);
     });
@@ -122,6 +123,28 @@ describe('KinesisStream', function() {
 
       ks.dispatch([message, message], function(err) {
         expect(err).to.exist;
+        done();
+      });
+    });
+    it('should not get an uncaugh if stream emit an error after complete', function(done) {
+      const message = {test: true};
+
+      kinesis.putRecords = sinon.stub().callsFake(function(r, cb) {
+        const awsReq = new EventEmitter();
+        const clientReq = new EventEmitter();
+        awsReq.httpRequest = { stream: clientReq};
+        awsReq.response= { httpResponse : { stream: new EventEmitter() } };
+
+        setTimeout(() => {
+          cb();
+          awsReq.emit('complete');
+          clientReq.emit('error', new Error('etimedout'));
+        }, 100);
+
+        return awsReq;
+      });
+
+      ks.dispatch([message, message], function(err) {
         done();
       });
     });
