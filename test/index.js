@@ -25,14 +25,14 @@ describe('KinesisStream', function() {
         streamName: 'test',
         objectMode: true,
         kinesis: {
-          endpoint: "http://somehost:1234"
+          endpoint: 'http://somehost:1234'
         }
       });
 
-      expect(ks.hasPriority).to.be.function;
+      expect(ks.hasPriority).to.be.a('function');
       expect(ks.recordsQueue).to.exist;
-      expect(ks.partitionKey).to.be.function;
-      expect(ks.kinesis.endpoint).to.equal("http://somehost:1234");
+      expect(ks.partitionKey).to.be.a('function');
+      expect(ks.kinesis.endpoint).to.equal('http://somehost:1234');
       expect(ks._writableState.objectMode).to.equal(true);
     });
   });

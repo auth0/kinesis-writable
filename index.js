@@ -120,8 +120,8 @@ KinesisStream.prototype.dispatch = function(records, cb) {
 
   const formattedRecords = records.map((record) => {
     const partitionKey = typeof this.partitionKey === 'function'
-	  ? this.partitionKey(record)
-	  : this.partitionKey;
+      ? this.partitionKey(record)
+      : this.partitionKey;
     return { Data: JSON.stringify(record), PartitionKey: partitionKey };
   });
 
@@ -143,17 +143,10 @@ KinesisStream.prototype.dispatch = function(records, cb) {
 };
 
 KinesisStream.prototype.putRecords = function(records, cb) {
-  const req = this.kinesis.putRecords({
+  this.kinesis.putRecords({
     StreamName: this.streamName,
     Records: records
   }, cb);
-
-  // remove all listeners which end up leaking
-  req.on('complete', function() {
-    req.removeAllListeners();
-    req.response.httpResponse.stream && req.response.httpResponse.stream.removeAllListeners();
-    req.httpRequest.stream && req.httpRequest.stream.removeAllListeners();
-  });
 };
 
 KinesisStream.prototype.flush = function() {
