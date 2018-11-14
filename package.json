@@ -3,6 +3,7 @@
   "description": "A stream implementation for kinesis.",
   "version": "4.2.0",
   "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
+  "license": "MIT",
   "repository": {
     "url": "git://github.com/auth0/kinesis-writable.git"
   },
