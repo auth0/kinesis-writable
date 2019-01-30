@@ -5,6 +5,7 @@ const Writable = require('stream').Writable;
 const retry = require('retry');
 const AWS = require('aws-sdk');
 const merge = require('lodash.merge');
+const safeStringify = require('fast-safe-stringify')
 
 /**
  * [KinesisStream description]
@@ -122,7 +123,7 @@ KinesisStream.prototype.dispatch = function(records, cb) {
     const partitionKey = typeof this.partitionKey === 'function'
       ? this.partitionKey(record)
       : this.partitionKey;
-    return { Data: JSON.stringify(record), PartitionKey: partitionKey };
+    return { Data: safeStringify(record), PartitionKey: partitionKey };
   });
 
   operation.attempt(() => {
