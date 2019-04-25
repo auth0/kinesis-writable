@@ -69,10 +69,19 @@ describe('KinesisStream', function() {
     });
     it('should call #dispatch once timer hits', function(done) {
       this.timeout(3000);
-      ks.buffer.timeout = 2;
-      for (var i = 0; i < 3; i++) {
-        ks.write(new Buffer(JSON.stringify(message)));
-      }
+      ks.buffer.timeout = 1;
+      // write one message to start timeout
+      ks.write(new Buffer(JSON.stringify(message)));
+      // write another after 500ms.
+      setTimeout(() => ks.write(new Buffer(JSON.stringify(message))), 500);
+      // write another after 750ms.
+      setTimeout(() => ks.write(new Buffer(JSON.stringify(message))), 750);
+      // at 1100 ms timer should have fired still.
+      setTimeout(function() {
+        expect(ks.dispatch.calledOnce).to.be.true;
+        expect(ks.dispatch.calledWith([message, message, message])).to.be.true;
+      }, 1100);
+      // and at 2 seconds it should not have fired again ...
       setTimeout(function() {
         expect(ks.dispatch.calledOnce).to.be.true;
         expect(ks.dispatch.calledWith([message, message, message])).to.be.true;
