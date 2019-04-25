@@ -99,13 +99,13 @@ KinesisStream.prototype._write = function(chunk, enc, next) {
     this.recordsQueue.push(chunk);
   }
 
-  if (this.timer) {
-    clearTimeout(this.timer);
-  }
-
   if (this.recordsQueue.length >= this.buffer.length || hasPriority) {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
     this.flush();
-  } else {
+  } else if (!this.timer) {
     this.timer = setTimeout(this.flush.bind(this), this.buffer.timeout * 1000);
   }
 
