@@ -151,6 +151,8 @@ KinesisStream.prototype.putRecords = function(records, cb) {
 };
 
 KinesisStream.prototype.flush = function() {
+  // reset timer so that next enqueue will start it again.
+  this.timer = null;
   this.dispatch(this.recordsQueue.splice(0, this.buffer.length));
 };
 
