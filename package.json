@@ -1,7 +1,7 @@
 {
   "name": "aws-kinesis-writable",
   "description": "A stream implementation for kinesis.",
-  "version": "4.2.2",
+  "version": "4.2.3",
   "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
   "license": "MIT",
   "repository": {
