@@ -5,7 +5,7 @@ const Writable = require('stream').Writable;
 const retry = require('retry');
 const AWS = require('aws-sdk');
 const merge = require('lodash.merge');
-const safeStringify = require('fast-safe-stringify')
+const safeStringify = require('fast-safe-stringify');
 
 /**
  * [KinesisStream description]
@@ -45,6 +45,13 @@ const defaultBuffer = {
   }
 };
 
+function isLambda() {
+  return !!(
+    (process.env.LAMBDA_TASK_ROOT && process.env.AWS_EXECUTION_ENV) ||
+    false
+  );
+}
+
 function KinesisStream (params) {
   assert(params.streamName, 'streamName required');
 
@@ -57,9 +64,11 @@ function KinesisStream (params) {
   this.hasPriority = this.buffer.isPrioritaryMsg || this.buffer.hasPriority;
 
   // increase the timeout to get credentials from the EC2 Metadata Service
-  AWS.config.credentials = new AWS.EC2MetadataCredentials({
-    httpOptions: { timeout: 5000 }
-  });
+  if (!isLambda()) {
+    AWS.config.credentials = new AWS.EC2MetadataCredentials({
+      httpOptions: { timeout: 5000 }
+    });
+  }
 
   this.recordsQueue = [];
 
