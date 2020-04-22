@@ -50,19 +50,19 @@ describe('KinesisStream', function() {
       ks.hasPriority = function() {
         return true;
       };
-      ks.write(new Buffer(JSON.stringify(message)));
+      ks.write(Buffer.from(JSON.stringify(message)));
       expect(ks.dispatch.calledOnce).to.be.true;
       expect(ks.dispatch.calledWith([message])).to.be.true;
     });
     it('should add message to queue if no priority was specified and add a timer', function() {
-      ks.write(new Buffer(JSON.stringify(message)));
+      ks.write(Buffer.from(JSON.stringify(message)));
       expect(ks.dispatch.calledOnce).to.be.false;
       expect(ks.timer).to.exist;
       expect(ks.recordsQueue.length).to.equal(1);
     });
     it('should add message to queue and call flush is size has crossed the threshold', function() {
       for (var i = 0; i < 10; i++) {
-        ks.write(new Buffer(JSON.stringify(message)));
+        ks.write(Buffer.from(JSON.stringify(message)));
       }
       expect(ks.dispatch.calledOnce).to.be.true;
       expect(ks.dispatch.calledWith([message, message, message, message, message, message, message, message, message, message])).to.be.true;
@@ -71,11 +71,11 @@ describe('KinesisStream', function() {
       this.timeout(3000);
       ks.buffer.timeout = 1;
       // write one message to start timeout
-      ks.write(new Buffer(JSON.stringify(message)));
+      ks.write(Buffer.from(JSON.stringify(message)));
       // write another after 500ms.
-      setTimeout(() => ks.write(new Buffer(JSON.stringify(message))), 500);
+      setTimeout(() => ks.write(Buffer.from(JSON.stringify(message))), 500);
       // write another after 750ms.
-      setTimeout(() => ks.write(new Buffer(JSON.stringify(message))), 750);
+      setTimeout(() => ks.write(Buffer.from(JSON.stringify(message))), 750);
       // at 1100 ms timer should have fired still.
       setTimeout(function() {
         expect(ks.dispatch.calledOnce).to.be.true;
