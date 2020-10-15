@@ -112,7 +112,8 @@ describe('KinesisStream', function() {
     });
     it('should return immediately if no messages are provided', function(done) {
       kinesis.putRecords = sinon.spy();
-      ks.dispatch([], function() {
+      ks.dispatch([], function(err) {
+        expect(err).to.be.null;
         expect(kinesis.putRecords.calledOnce).to.be.false;
         done();
       });
@@ -125,7 +126,6 @@ describe('KinesisStream', function() {
 
       ks.on('error', function(err) {
         expect(err).to.exist;
-        expect(err.records.length).to.equal(2);
         expect(stub.calledThrice).to.be.true;
       });
 
@@ -138,7 +138,6 @@ describe('KinesisStream', function() {
     it('should putRecords without error when record contains circular references', function() {
       const logMessage = (s) => { return s.getCall(0).args[0][0].Data; };
       ks.putRecords = sinon.spy();
-
       const message = {
         hi: 'hello'
       };
@@ -146,8 +145,28 @@ describe('KinesisStream', function() {
 
       ks.dispatch([message]);
 
-      expect(ks.putRecords.calledOnce).to.be.true;
+      expect(ks.putRecords.calledOnce).to.be.true
       expect('{"hi":"hello","message":"[Circular]"}').to.equal(logMessage(ks.putRecords));
+
+    });
+
+    it('should invoke success when the records succeed to push', function(done) {
+      const stub = sinon.stub(ks, 'putRecords').callsFake(function(records, cb) {
+        return cb(null, records);
+      });
+
+      const message = {
+        hi: 'hello'
+      };
+      message.message = message;
+
+      ks.on('success', function(records) {
+        expect(records).to.exist;
+        expect(records.length).to.equal(1);
+        done();
+      });
+
+      ks.dispatch([message]);
     });
   });
 });

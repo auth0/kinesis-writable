@@ -67,8 +67,21 @@ new KinesisWritable({
 
 ### Events
 
-* `error`: Emitted every time records are failed to be written.
+| Name | Description | Parameters |
+|---|---|---|
+| `error`| Emitted every time records are failed to be written after all retries fail | `err` will contain the latest retry error. Failed encoded records will be in `err.records` |
+| `error`| Emitted every time records succeed to push to the kinesis stream. | `records` will contain `records.FailedRecordCount:0` and an array of objects on `records.Records` containing each `SequenceNumber:` and `ShardId` |
 
+```javascript
+new KinesisWritable({
+  region: 'AWS_REGION',
+  streamName: 'MyKinesisStream'
+}).on('error', (err) => {
+  console.log(`Failed to push ${err.records}`)
+}).on('success', (records) => {
+  console.log(`Succesfully pushed ${err.length} records`)
+})
+```
 **Note**: Amazon Credentials are not required. It will either use the environment variables, `~/.aws/credentials` or roles as every other aws sdk.
 
 ## Issue Reporting
