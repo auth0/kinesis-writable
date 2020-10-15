@@ -136,7 +136,10 @@ KinesisStream.prototype.dispatch = function(records, cb) {
   });
 
   operation.attempt(() => {
-    this.putRecords(formattedRecords, (err) => {
+    this.putRecords(formattedRecords, (err, data) => {
+      if (!err) {
+        this.emitRecordSuccess(data);
+      }
       if (operation.retry(err)) {
         return;
       }
@@ -168,6 +171,10 @@ KinesisStream.prototype.flush = function() {
 KinesisStream.prototype.emitRecordError = function (err, records) {
   err.records = records;
   this.emit('error', err);
+};
+
+KinesisStream.prototype.emitRecordSuccess = function (records) {
+  this.emit('success', records);
 };
 
 module.exports = KinesisStream;
