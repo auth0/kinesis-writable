@@ -3,7 +3,9 @@ const assert = require('assert');
 const Writable = require('stream').Writable;
 
 const retry = require('retry');
-const AWS = require('aws-sdk');
+const { KinesisClient } = require('@aws-sdk/client-kinesis');
+const { fromNodeProviderChain } = require('@aws-sdk/credential-providers');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const merge = require('lodash.merge');
 const safeStringify = require('fast-safe-stringify');
 
@@ -63,24 +65,38 @@ function KinesisStream (params) {
 
   this.hasPriority = this.buffer.isPrioritaryMsg || this.buffer.hasPriority;
 
-  // increase the timeout to get credentials from the EC2 Metadata Service
-  if (!isLambda()) {
-    AWS.config.credentials = new AWS.EC2MetadataCredentials({
-      httpOptions: { timeout: 5000 }
+  this.recordsQueue = [];
+
+  // 1. Create unified HTTP Handler with proper timeout configuration
+  const httpHandler = new NodeHttpHandler({
+    connectionTimeout: params.httpOptions?.timeout || 5000,
+    requestTimeout: params.httpOptions?.timeout || 120000,
+    httpsAgent: params.httpOptions?.agent
+  });
+
+  // 2. Build credentials based on provided parameters or default provider chain
+  let credentials;
+  if (params.credentials) {
+    credentials = params.credentials;
+  } else if (params.accessKeyId) {
+    credentials = {
+      accessKeyId: params.accessKeyId,
+      secretAccessKey: params.secretAccessKey,
+      sessionToken: params.sessionToken
+    };
+  } else {
+    // Critical update: Pass httpHandler via clientConfig
+    credentials = fromNodeProviderChain({
+      clientConfig: { requestHandler: httpHandler }
     });
   }
 
-  this.recordsQueue = [];
-
-  this.kinesis = params.kinesis || new AWS.Kinesis({
-    accessKeyId: params.accessKeyId,
-    secretAccessKey: params.secretAccessKey,
-    sessionToken: params.sessionToken,
-    credentials: params.credentials,
+  // 3. Create Kinesis client with proper configuration
+  this.kinesis = params.kinesis || new KinesisClient({
+    credentials: credentials,
     region: params.region,
     endpoint: params.endpoint,
-    objectMode: params.objectMode,
-    httpOptions: params.httpOptions
+    requestHandler: httpHandler
   });
 
   Writable.call(this, { objectMode: params.objectMode });
@@ -156,7 +172,14 @@ KinesisStream.prototype.putRecords = function(records, cb) {
   this.kinesis.putRecords({
     StreamName: this.streamName,
     Records: records
-  }, cb);
+  })
+    .then((result) => cb(null, result))
+    .catch((err) => {
+      if (!err.code && err.name) {
+        err.code = err.name;
+      }
+      cb(err);
+    });
 };
 
 KinesisStream.prototype.flush = function() {
