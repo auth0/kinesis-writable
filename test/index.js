@@ -13,7 +13,7 @@ describe('KinesisStream', function() {
     it('should build a stream with default configurations', function() {
       const ks = new KinesisStream({
         streamName: 'test',
-        kinesis: {}
+        kinesis: { send: sinon.stub().resolves({ Records: [] }) }
       });
 
       expect(ks.hasPriority).to.be.a('function');
@@ -25,6 +25,7 @@ describe('KinesisStream', function() {
         streamName: 'test',
         objectMode: true,
         kinesis: {
+          send: sinon.stub().resolves({ Records: [] }),
           endpoint: 'http://somehost:1234'
         }
       });
@@ -42,7 +43,7 @@ describe('KinesisStream', function() {
     beforeEach(function() {
       ks = new KinesisStream({
         streamName: 'test',
-        kinesis: {}
+        kinesis: { send: sinon.stub().resolves({ Records: [] }) }
       });
       ks.dispatch = sinon.spy();
     });
@@ -93,7 +94,7 @@ describe('KinesisStream', function() {
     it('should call #dispatch with at most buffer size', function() {
       const ks = new KinesisStream({
         streamName: 'test',
-        kinesis: {}
+        kinesis: { send: sinon.stub().resolves({ Records: [] }) }
       });
       ks.dispatch = sinon.spy();
       ks.recordsQueue = [1,2,3];
@@ -103,7 +104,7 @@ describe('KinesisStream', function() {
     });
   });
   describe('#dispatch', function() {
-    var ks, kinesis = {};
+    var ks, kinesis = { send: sinon.stub().resolves({ Records: [] }) };
     beforeEach(function() {
       ks = new KinesisStream({
         streamName: 'test',
@@ -147,7 +148,7 @@ describe('KinesisStream', function() {
       ks.dispatch([message]);
 
       expect(ks.putRecords.calledOnce).to.be.true;
-      expect('{"hi":"hello","message":"[Circular]"}').to.equal(logMessage(ks.putRecords));
+      expect('{"hi":"hello","message":"[Circular]"}').to.equal(logMessage(ks.putRecords).toString('utf8'));
     });
   });
 });
