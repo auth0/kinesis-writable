@@ -1,0 +1,41 @@
+name: Run Reversing Labs Scanner
+
+inputs:
+  artifact-path:
+    required: true
+  version:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Create temporary directory for reports
+      shell: bash
+      run: mkdir -p /tmp/rl_reports
+
+    - name: Download RL wrapper
+      shell: bash
+      run: |
+        aws s3 cp s3://reversinglabs-public/rl-wrapper/latest/rl-wrapper-linux-x64.zip /tmp/rl-wrapper.zip --region us-east-1
+        unzip -o /tmp/rl-wrapper.zip -d /tmp/rl-wrapper
+      env:
+        AWS_ACCESS_KEY_ID: ${{ env.PRODSEC_TOOLS_USER }}
+        AWS_SECRET_ACCESS_KEY: ${{ env.PRODSEC_TOOLS_TOKEN }}
+        AWS_DEFAULT_REGION: us-east-1
+
+    - name: Scan artifact
+      shell: bash
+      run: |
+        /tmp/rl-wrapper/rl-wrapper \
+          --rl-site-key="${RLSECURE_SITE_KEY}" \
+          --rl-user-email="${RLSECURE_USER_EMAIL}" \
+          --rl-package-url="https://${{ github.repository_owner }}.jfrog.io/artifactory/npm-local/aws-kinesis-writable/-/aws-kinesis-writable-${{ inputs.version }}.tgz" \
+          --rl-submit-record=true \
+          --rl-submit-license=true \
+          --rl-crawler-command="npm ci" \
+          --rl-verbose-mode=true \
+          "${{ inputs.artifact-path }}"
+      env:
+        RLSECURE_LICENSE: ${{ env.RLSECURE_LICENSE }}
+        RLSECURE_SITE_KEY: ${{ env.RLSECURE_SITE_KEY }}
+        RLSECURE_USER_EMAIL: prodsec-tools@auth0.com

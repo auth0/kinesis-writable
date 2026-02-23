@@ -1,0 +1,63 @@
+name: Create npm and GitHub Release
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: true
+        type: string
+      require-build:
+        default: 'false'
+        type: string
+    secrets:
+      github-token: { required: true }
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'release/'))
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: get_version
+        uses: ./.github/actions/get-version
+
+      - id: get_prerelease
+        uses: ./.github/actions/get-prerelease
+        with:
+          version: ${{ steps.get_version.outputs.version }}
+
+      - id: get_release_notes
+        uses: ./.github/actions/get-release-notes
+        with:
+          token: ${{ secrets.github-token }}
+          version: ${{ steps.get_version.outputs.version }}
+          repo_owner: ${{ github.repository_owner }}
+          repo_name: ${{ github.event.repository.name }}
+
+      - id: tag_exists
+        uses: ./.github/actions/tag-exists
+        with:
+          tag: ${{ steps.get_version.outputs.version }}
+          token: ${{ secrets.github-token }}
+
+      - if: steps.tag_exists.outputs.exists == 'true'
+        run: exit 1
+
+      - uses: ./.github/actions/npm-publish
+        with:
+          node-version: ${{ inputs.node-version }}
+          require-build: ${{ inputs.require-build }}
+          release-directory: './'
+          version: ${{ steps.get_version.outputs.version }}
+
+      - uses: ./.github/actions/release-create
+        with:
+          token: ${{ secrets.github-token }}
+          name: ${{ steps.get_version.outputs.version }}
+          body: ${{ steps.get_release_notes.outputs.release-notes }}
+          tag: ${{ steps.get_version.outputs.version }}
+          commit: ${{ github.sha }}
+          prerelease: ${{ steps.get_prerelease.outputs.prerelease }}
