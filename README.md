@@ -1,3 +1,9 @@
+## ⚠️ NOTICE: Repository Status
+
+**This public repository is no longer maintained.** The project has been moved to a private repository at [https://github.com/atko-cic/kinesis-writable](https://github.com/atko-cic/kinesis-writable) and will not receive further updates here.
+
+---
+
 Kinesis writable stream for [bunyan](http://npmjs.com/package/bunyan).
 
 ## Installation
