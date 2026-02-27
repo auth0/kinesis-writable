@@ -1,3 +1,9 @@
+## ⚠️ NOTICE: Repository Status
+
+**This public repository is no longer maintained.**
+
+---
+
 Kinesis writable stream for [bunyan](http://npmjs.com/package/bunyan).
 
 ## Installation
