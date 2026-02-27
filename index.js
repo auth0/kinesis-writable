@@ -3,7 +3,9 @@ const assert = require('assert');
 const Writable = require('stream').Writable;
 
 const retry = require('retry');
-const AWS = require('aws-sdk');
+const { KinesisClient, PutRecordsCommand } = require('@aws-sdk/client-kinesis');
+const { fromNodeProviderChain } = require('@aws-sdk/credential-providers');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
 const merge = require('lodash.merge');
 const safeStringify = require('fast-safe-stringify');
 
@@ -55,6 +57,10 @@ function isLambda() {
 function KinesisStream (params) {
   assert(params.streamName, 'streamName required');
 
+  if (params.kinesis && typeof params.kinesis.send !== 'function') {
+    throw new Error('params.kinesis must be an AWS SDK v3 KinesisClient instance (missing .send() method)');
+  }
+
   this.streamName = params.streamName;
   this.buffer = merge(defaultBuffer, params.buffer);
   this.partitionKey = params.partitionKey || function getPartitionKey() {
@@ -63,25 +69,55 @@ function KinesisStream (params) {
 
   this.hasPriority = this.buffer.isPrioritaryMsg || this.buffer.hasPriority;
 
-  // increase the timeout to get credentials from the EC2 Metadata Service
-  if (!isLambda()) {
-    AWS.config.credentials = new AWS.EC2MetadataCredentials({
-      httpOptions: { timeout: 5000 }
+  this.recordsQueue = [];
+
+  // 1. Create unified HTTP Handler with proper timeout configuration
+  const handlerOptions = {
+    connectionTimeout: params.httpOptions?.connectionTimeout || params.httpOptions?.timeout || 5000,
+    requestTimeout: params.httpOptions?.requestTimeout || 120000,
+  };
+
+  // Map v2's single agent to both httpAgent and httpsAgent for compatibility
+  // (v3 requires separate agents; if user passes one, use it for both protocols)
+  if (params.httpOptions?.agent) {
+    handlerOptions.httpAgent = params.httpOptions.agent;
+    handlerOptions.httpsAgent = params.httpOptions.agent;
+  }
+
+  const httpHandler = new NodeHttpHandler(handlerOptions);
+
+  // 2. Build credentials based on provided parameters or default provider chain
+  let credentials;
+  if (params.credentials) {
+    credentials = params.credentials;
+  } else if (params.accessKeyId) {
+    credentials = {
+      accessKeyId: params.accessKeyId,
+      secretAccessKey: params.secretAccessKey,
+      sessionToken: params.sessionToken
+    };
+  } else {
+    // Critical update: Pass httpHandler via clientConfig
+    credentials = fromNodeProviderChain({
+      clientConfig: { requestHandler: httpHandler }
     });
   }
 
-  this.recordsQueue = [];
+  // 3. Create Kinesis client with proper configuration
+  const clientConfig = { credentials, requestHandler: httpHandler };
+  if (params.region) clientConfig.region = params.region;
 
-  this.kinesis = params.kinesis || new AWS.Kinesis({
-    accessKeyId: params.accessKeyId,
-    secretAccessKey: params.secretAccessKey,
-    sessionToken: params.sessionToken,
-    credentials: params.credentials,
-    region: params.region,
-    endpoint: params.endpoint,
-    objectMode: params.objectMode,
-    httpOptions: params.httpOptions
-  });
+  // v3 requires endpoint to include protocol (http:// or https://)
+  // Auto-complete if missing to prevent TypeError [ERR_INVALID_URL]
+  if (params.endpoint) {
+    let safeEndpoint = params.endpoint;
+    if (!/^https?:\/\//.test(safeEndpoint)) {
+      safeEndpoint = 'https://' + safeEndpoint;
+    }
+    clientConfig.endpoint = safeEndpoint;
+  }
+
+  this.kinesis = params.kinesis || new KinesisClient(clientConfig);
 
   Writable.call(this, { objectMode: params.objectMode });
 }
@@ -132,7 +168,10 @@ KinesisStream.prototype.dispatch = function(records, cb) {
     const partitionKey = typeof this.partitionKey === 'function'
       ? this.partitionKey(record)
       : this.partitionKey;
-    return { Data: safeStringify(record), PartitionKey: partitionKey };
+    return {
+      Data: Buffer.from(safeStringify(record), 'utf8'),
+      PartitionKey: String(partitionKey)
+    };
   });
 
   operation.attempt(() => {
@@ -153,10 +192,20 @@ KinesisStream.prototype.dispatch = function(records, cb) {
 };
 
 KinesisStream.prototype.putRecords = function(records, cb) {
-  this.kinesis.putRecords({
+  this.kinesis.send(new PutRecordsCommand({
     StreamName: this.streamName,
     Records: records
-  }, cb);
+  }))
+    .then((result) => cb(null, result))
+    .catch((err) => {
+      if (!err.code && err.name) {
+        err.code = err.name;
+      }
+      if (!err.statusCode && err.$metadata?.httpStatusCode) {
+        err.statusCode = err.$metadata.httpStatusCode;
+      }
+      cb(err);
+    });
 };
 
 KinesisStream.prototype.flush = function() {
